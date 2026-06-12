@@ -1,8 +1,13 @@
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { ScrollToPlugin } from 'gsap/ScrollToPlugin';
 import { App } from './scene/index.js';
 
-gsap.registerPlugin(ScrollTrigger);
+gsap.registerPlugin(ScrollTrigger, ScrollToPlugin);
+
+const STEP_RANGES = [
+  [0.10, 0.24], [0.24, 0.37], [0.37, 0.50], [0.50, 0.62], [0.62, 0.73], [0.73, 0.84], [0.84, 1.0],
+];
 
 document.body.classList.add('is-locked');
 window.scrollTo(0, 0);
@@ -13,6 +18,7 @@ const heroPos = app.camPos.clone();
 
 /* ---------------------------------------------------- step panel */
 const steps = [...document.querySelectorAll('.flow__step')];
+let prevActive = 0;
 
 function setStep(active) {
   for (const el of steps) {
@@ -20,20 +26,40 @@ function setStep(active) {
     const body = el.querySelector('.flow__body');
     const isActive = n === active;
     el.classList.toggle('is-active', isActive);
-    gsap.to(body, {
-      height: isActive ? 'auto' : 0,
-      duration: 0.55,
-      ease: 'power3.inOut',
-      overwrite: true,
-    });
+    gsap.to(body, { height: isActive ? 'auto' : 0, duration: 0.5, ease: 'power3.inOut', overwrite: true });
     if (!isActive) {
       const fill = el.querySelector('.flow__track-fill');
       if (fill) fill.style.height = '0%';
     }
   }
+  // animate the newly stepped-over step, and pulse the scene like a hover
+  if (active && active !== prevActive) {
+    const el = steps[active - 1];
+    if (el) {
+      gsap.fromTo(el.querySelector('.flow__number'), { scale: 0.55 }, { scale: 1, duration: 0.6, ease: 'back.out(2.6)' });
+      gsap.fromTo(el.querySelector('.flow__title'), { x: -12, opacity: 0.3 }, { x: 0, opacity: 1, duration: 0.5, ease: 'power3.out' });
+    }
+    app.stepPulse();
+  }
+  prevActive = active;
 }
 
 app.buildJourney(setStep);
+
+/* steps are hoverable (cursor reacts) + clickable to jump to that stage */
+steps.forEach((el) => {
+  const header = el.querySelector('.flow__header');
+  header.addEventListener('pointerenter', () => el.classList.add('is-hover'));
+  header.addEventListener('pointerleave', () => el.classList.remove('is-hover'));
+  header.addEventListener('click', () => {
+    const n = +el.dataset.step;
+    const top = document.querySelector('.top');
+    const [a, b] = STEP_RANGES[n - 1];
+    const mid = (a + b) / 2;
+    const targetY = top.offsetTop + (top.offsetHeight - window.innerHeight) * mid;
+    gsap.to(window, { scrollTo: targetY, duration: 1.0, ease: 'power2.inOut' });
+  });
+});
 
 /* ---------------------------------------------------- hero exit on scroll */
 gsap.timeline({
@@ -176,3 +202,46 @@ Promise.all([
   document.fonts?.ready ?? Promise.resolve(),
   new Promise((res) => loaderTl.eventCallback('onComplete', res)),
 ]).then(intro);
+
+/* ---------------------------------------------------- custom cursor + magnetic buttons */
+if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
+  const dot = document.createElement('div');
+  dot.id = 'cursor';
+  const ring = document.createElement('div');
+  ring.id = 'cursor-ring';
+  ring.innerHTML = '<svg viewBox="0 0 100 100"><polygon points="50,4 90,27 90,73 50,96 10,73 10,27"/></svg>';
+  document.body.append(dot, ring);
+  // the dotted hexagon spins continuously (and faster on hover)
+  const hex = ring.querySelector('svg');
+  const spin = gsap.to(hex, { rotation: 360, duration: 9, repeat: -1, ease: 'none', transformOrigin: '50% 50%' });
+
+  let mx = window.innerWidth / 2, my = window.innerHeight / 2, rx = mx, ry = my;
+  window.addEventListener('pointermove', (e) => {
+    mx = e.clientX; my = e.clientY;
+    dot.style.transform = `translate(${mx}px, ${my}px) translate(-50%, -50%)`;
+  }, { passive: true });
+  gsap.ticker.add(() => {
+    rx += (mx - rx) * 0.2; ry += (my - ry) * 0.2;
+    ring.style.transform = `translate(${rx}px, ${ry}px) translate(-50%, -50%)`;
+  });
+  document.addEventListener('pointerover', () => { dot.style.opacity = ring.style.opacity = '1'; });
+  document.addEventListener('mouseleave', () => { dot.style.opacity = ring.style.opacity = '0'; });
+
+  document.querySelectorAll('a, button, .pill-btn, .faq-item__header, .footer-nav-btn, .flow__header').forEach((el) => {
+    el.addEventListener('pointerenter', () => { ring.classList.add('is-hover'); gsap.to(spin, { timeScale: 3, duration: 0.4 }); });
+    el.addEventListener('pointerleave', () => { ring.classList.remove('is-hover'); gsap.to(spin, { timeScale: 1, duration: 0.4 }); });
+  });
+
+  document.querySelectorAll('.pill-btn, .footer-nav-btn').forEach((btn) => {
+    const strength = btn.classList.contains('footer-nav-btn') ? 0.16 : 0.4;
+    btn.addEventListener('pointermove', (e) => {
+      const r = btn.getBoundingClientRect();
+      gsap.to(btn, {
+        x: (e.clientX - (r.left + r.width / 2)) * strength,
+        y: (e.clientY - (r.top + r.height / 2)) * strength,
+        duration: 0.4, ease: 'power3.out',
+      });
+    });
+    btn.addEventListener('pointerleave', () => gsap.to(btn, { x: 0, y: 0, duration: 0.55, ease: 'elastic.out(1, 0.4)' }));
+  });
+}

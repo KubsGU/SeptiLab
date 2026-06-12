@@ -9,6 +9,101 @@ function gauss(rand) {
   return (rand() + rand() + rand() + rand() - 2) / 2; // approx normal in [-1, 1]
 }
 
+function ss(a, b, x) {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+}
+
+/* ------------------------------------------------------------------
+   One straight glowing culture line running the length of the journey
+   and curving into the tank at the end. A shared uHead drives a bright
+   wavefront travelling along it by world-X progress, with flowing dots.
+------------------------------------------------------------------- */
+export function buildMergePath({ xStart = 2, xEnd = 151, y = 0.16, zEnd = 2 } = {}) {
+  const g = new THREE.Group();
+  const shared = {
+    uHead: { value: 0 },
+    uTime: { value: 0 },
+    uFade: { value: 1 },
+    uColor: { value: GLOW_GREEN.clone() },
+    uStart: { value: xStart },
+    uEnd: { value: xEnd },
+  };
+  const mat = new THREE.ShaderMaterial({
+    uniforms: shared,
+    vertexShader: /* glsl */ `
+      uniform float uStart; uniform float uEnd;
+      varying float vProg;
+      void main() {
+        vProg = (position.x - uStart) / (uEnd - uStart);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform float uHead; uniform float uTime; uniform float uFade; uniform vec3 uColor;
+      varying float vProg;
+      void main() {
+        float d = uHead - vProg;
+        float head = exp(-pow(d * 20.0, 2.0));
+        float trail = d > 0.0 ? exp(-d * 4.5) * 0.55 : 0.0;
+        float dots = 0.55 + 0.45 * sin(vProg * 130.0 - uTime * 5.5);
+        float b = (head * 1.5 + trail) * (0.74 + 0.26 * dots);
+        b *= smoothstep(0.0, 0.012, uHead) * uFade;
+        if (b < 0.02) discard;
+        gl_FragColor = vec4(uColor * b, min(b, 1.0));
+      }
+    `,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+
+  const pts = [];
+  for (let x = xStart; x <= xEnd; x += 1.4) {
+    const conv = ss(xEnd - 11, xEnd, x);
+    pts.push(new THREE.Vector3(x, y, zEnd * conv));
+  }
+  const curve = new THREE.CatmullRomCurve3(pts);
+  const geo = new THREE.TubeGeometry(curve, Math.ceil((xEnd - xStart) / 1.2), 0.1, 8, false);
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.frustumCulled = false;
+  g.add(mesh);
+
+  g.userData = { head: shared.uHead, time: shared.uTime, fade: shared.uFade, xStart, xEnd, y, zEnd };
+  return g;
+}
+
+/* ------------------------------------------------------------------
+   Dotted-hexagon ground marker that pulses as the culture line passes.
+------------------------------------------------------------------- */
+export function buildHexMarker(size = 2.6) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const ctx = c.getContext('2d');
+  ctx.translate(128, 128);
+  ctx.strokeStyle = 'rgba(150,255,195,1)';
+  ctx.lineWidth = 9;
+  ctx.setLineDash([5, 15]);
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  for (let k = 0; k < 6; k++) {
+    const a = (Math.PI / 3) * k - Math.PI / 2;
+    const px = Math.cos(a) * 104, py = Math.sin(a) * 104;
+    k ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+  }
+  ctx.closePath();
+  ctx.stroke();
+  const tex = new THREE.CanvasTexture(c);
+  const mat = new THREE.MeshBasicMaterial({
+    map: tex, transparent: true, depthWrite: false,
+    blending: THREE.AdditiveBlending, color: new THREE.Color(0.5, 1.6, 0.95), opacity: 0,
+  });
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(size, size), mat);
+  m.rotation.x = -Math.PI / 2;
+  m.userData.mat = mat;
+  return m;
+}
+
 function rng(seed) {
   let s = seed;
   return () => {
@@ -200,7 +295,7 @@ export function buildDotField(cx, cz, w, d, { pitch = 0.55, seed = 11 } = {}) {
    Red strands: parallel tubes arcing from the city into the HQ face,
    with flowing dashes. uDraw draws them on; uTime flows the dashes.
 ------------------------------------------------------------------- */
-export function buildStrands(startPoints, endPoints, arcHeight = 5, color = GLOW_BLUE) {
+export function buildStrands(startPoints, endPoints, arcHeight = 5, color = GLOW_BLUE, radius = 0.055, alpha = 1) {
   const g = new THREE.Group();
   const mats = [];
   for (let k = 0; k < startPoints.length; k++) {
@@ -211,11 +306,12 @@ export function buildStrands(startPoints, endPoints, arcHeight = 5, color = GLOW
     const mid2 = a.clone().lerp(b, 0.72);
     mid2.y = Math.max(a.y, b.y) + arcHeight * 0.45;
     const curve = new THREE.CatmullRomCurve3([a, mid1, mid2, b]);
-    const geo = new THREE.TubeGeometry(curve, 90, 0.055, 6, false);
+    const geo = new THREE.TubeGeometry(curve, 80, radius, 6, false);
     const mat = new THREE.ShaderMaterial({
       uniforms: {
         uDraw: { value: 0 },
         uTime: { value: 0 },
+        uAlpha: { value: alpha },
         uColor: { value: color.clone() },
       },
       vertexShader: /* glsl */ `
@@ -228,6 +324,7 @@ export function buildStrands(startPoints, endPoints, arcHeight = 5, color = GLOW
       fragmentShader: /* glsl */ `
         uniform float uDraw;
         uniform float uTime;
+        uniform float uAlpha;
         uniform vec3 uColor;
         varying vec2 vUv;
         void main() {
@@ -236,7 +333,7 @@ export function buildStrands(startPoints, endPoints, arcHeight = 5, color = GLOW
           float dash = 0.62 + 0.38 * sin(vUv.x * 70.0 - uTime * 6.0);
           float headGlow = exp(-pow((vUv.x - uDraw) * 18.0, 2.0)) * 0.7;
           vec3 col = uColor * (0.6 + 0.4 * dash + headGlow);
-          gl_FragColor = vec4(col, visible * (0.72 + 0.22 * dash));
+          gl_FragColor = vec4(col, visible * (0.72 + 0.22 * dash) * uAlpha);
         }
       `,
       transparent: true,

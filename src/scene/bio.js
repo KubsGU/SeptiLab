@@ -874,6 +874,10 @@ function buildTankLiquid(w, h, d) {
           float fleck = 0.5 + 0.5 * sin(vY * 42.0 + uTime * 2.0);
           col += vec3(0.05, 0.34, 0.18) * uHealth * (0.45 + 0.25 * fleck);
         }
+        // a bright treatment front sweeps upward while the flora establishes
+        float front = uHealth * 1.1;
+        float band = exp(-pow((vY - front) * 5.0, 2.0)) * smoothstep(0.02, 0.18, uHealth) * smoothstep(1.0, 0.72, uHealth);
+        col += vec3(0.12, 0.62, 0.32) * band * 1.3;
         float shade = 0.78 + 0.22 * clamp(dot(vN, normalize(vec3(0.4, 0.8, 0.5))), 0.0, 1.0);
         gl_FragColor = vec4(col * shade, 1.0);
       }
@@ -1007,9 +1011,27 @@ export function buildSepticCutaway() {
   waste.position.copy(liquid.position);
   g.add(waste);
 
-  const bacteria = buildBacteria(w - 0.5, h - 0.6, d - 0.5, 260);
+  const bacteria = buildBacteria(w - 0.5, h - 0.6, d - 0.5, 380);
   bacteria.position.copy(liquid.position);
   g.add(bacteria);
+
+  // rising gas bubbles (a sign of an active, healthy tank)
+  const bubbles = buildBubbles(Math.min(w, d) / 2 - 0.5, h - 0.7, 20);
+  bubbles.position.copy(liquid.position).add(new THREE.Vector3(0, -(h - 0.55) / 2, 0));
+  g.add(bubbles);
+
+  // murky odor wisps that fade away as the tank recovers
+  const wtex = makeGlowTexture('rgba(120,112,96,0.9)', 'rgba(120,112,96,0)');
+  const wisps = [];
+  for (let i = 0; i < 5; i++) {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: wtex, transparent: true, depthWrite: false, opacity: 0,
+      color: new THREE.Color(0.55, 0.5, 0.42),
+    }));
+    s.position.set((i - 2) * 0.7, h, 0.3);
+    g.add(s);
+    wisps.push({ s, phase: i / 5, x: (i - 2) * 0.7 });
+  }
 
   // falling powder dose + green burst (animated from the journey)
   const dose = new THREE.Group();
@@ -1031,11 +1053,164 @@ export function buildSepticCutaway() {
     liquid: liquid.userData.mat,
     waste,
     bacteria: bacteria.userData.mat,
+    bubbles,
+    wisps,
+    tankTop: h,
     dose,
     inletWorld: new THREE.Vector3(-w / 2 - 1.0, h - 0.4, 0),
     manholeWorld: new THREE.Vector3(0, h + 0.3, 0),
     size: { w, h, d },
   };
+  return g;
+}
+
+/* ============================================================ extra props (densify every zone) */
+const stoneMat = new THREE.MeshStandardMaterial({ color: 0xbcc7d3, roughness: 1 });
+const darkGlass = new THREE.MeshStandardMaterial({ color: 0x2b3a63, roughness: 0.3, metalness: 0.2 });
+
+export function buildRock(seed = 1) {
+  const g = new THREE.Group();
+  const rand = rng(seed * 13 + 1);
+  const n = 1 + Math.floor(rand() * 3);
+  for (let i = 0; i < n; i++) {
+    const r = 0.18 + rand() * 0.4;
+    const rock = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 0), stoneMat);
+    rock.position.set((rand() - 0.5) * 0.8, r * 0.5, (rand() - 0.5) * 0.8);
+    rock.rotation.set(rand() * 3, rand() * 3, rand() * 3);
+    rock.scale.y = 0.65 + rand() * 0.4;
+    rock.castShadow = true;
+    g.add(rock);
+  }
+  return g;
+}
+
+export function buildGrassTuft(seed = 1) {
+  const g = new THREE.Group();
+  const rand = rng(seed * 7 + 3);
+  const n = 4 + Math.floor(rand() * 5);
+  for (let i = 0; i < n; i++) {
+    const blade = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.32 + rand() * 0.32, 4), whiteMat);
+    blade.position.set((rand() - 0.5) * 0.45, 0.18, (rand() - 0.5) * 0.45);
+    blade.rotation.z = (rand() - 0.5) * 0.5;
+    g.add(blade);
+  }
+  g.userData.sway = g;
+  g.userData.swayBase = rand() * 6.28;
+  return g;
+}
+
+export function buildLog() {
+  const g = new THREE.Group();
+  const log = cyl(0.18, 0.2, 1.5, 10, woodMat);
+  log.rotation.z = Math.PI / 2;
+  log.position.y = 0.2;
+  log.castShadow = true;
+  g.add(log);
+  return g;
+}
+
+export function buildSilo(scale = 1) {
+  const g = new THREE.Group();
+  const r = 0.95 * scale, h = 3.6 * scale;
+  const skirt = cyl(r, r * 1.04, 0.5 * scale, 22, accentMat);
+  skirt.position.y = 0.25 * scale; g.add(skirt);
+  const body = cyl(r, r, h, 24, steelMat);
+  body.position.y = 0.5 * scale + h / 2; g.add(body);
+  const top = new THREE.Mesh(new THREE.ConeGeometry(r, 0.95 * scale, 24), steelMat);
+  top.position.y = 0.5 * scale + h + 0.47 * scale; g.add(top);
+  for (let i = 0; i < 3; i++) {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(r, 0.035, 6, 24), accentMat);
+    ring.rotation.x = Math.PI / 2; ring.position.y = 0.5 * scale + h * (0.28 + i * 0.26); g.add(ring);
+  }
+  g.userData.topY = 0.5 * scale + h + 0.95 * scale;
+  return g;
+}
+
+export function buildPallet(stack = 3) {
+  const g = new THREE.Group();
+  g.add(box(1.2, 0.16, 1.0, 0, 0.08, 0, woodMat, 0.02));
+  const rand = rng(stack * 5 + 2);
+  for (let i = 0; i < stack; i++) {
+    g.add(box(1.0, 0.42, 0.8, (rand() - 0.5) * 0.12, 0.16 + 0.23 + i * 0.44, 0, labelMat, 0.12));
+  }
+  return g;
+}
+
+export function buildControlPanel() {
+  const g = new THREE.Group();
+  g.add(box(1.4, 1.6, 0.5, 0, 0.8, 0, steelMat, 0.05));
+  g.add(box(1.12, 0.74, 0.06, 0, 1.16, 0.27, darkGlass, 0.03));
+  for (let i = 0; i < 4; i++) {
+    const knob = cyl(0.05, 0.05, 0.06, 8, accentMat);
+    knob.rotation.x = Math.PI / 2;
+    knob.position.set(-0.45 + i * 0.3, 0.55, 0.27); g.add(knob);
+  }
+  return g;
+}
+
+export function buildLabBuilding() {
+  const g = new THREE.Group();
+  g.add(box(7.2, 3.4, 4.6, 0, 1.7, 0));
+  g.add(box(7.4, 0.32, 4.8, 0, 3.5, 0, accentMat, 0.04));
+  for (let i = 0; i < 5; i++) g.add(box(0.9, 1.1, 0.08, -2.7 + i * 1.35, 1.95, 2.32, darkGlass, 0.03));
+  g.add(box(1.2, 2.0, 0.12, 0, 1.0, 2.34, accentMat, 0.03));
+  g.add(box(1.0, 0.5, 1.0, -2.1, 3.85, -1, steelMat, 0.05));
+  g.add(box(0.8, 0.4, 0.8, 1.9, 3.8, 0.6, steelMat, 0.05));
+  return g;
+}
+
+export function buildConveyorJars(len = 6, n = 7) {
+  const g = new THREE.Group();
+  g.add(box(len, 0.45, 0.95, 0, 0.55, 0, steelMat, 0.04));
+  g.add(box(len, 0.08, 0.72, 0, 0.82, 0, accentMat, 0.02));
+  for (const x of [-len / 2 + 0.3, len / 2 - 0.3]) g.add(box(0.12, 0.55, 0.7, x, 0.27, 0, steelMat, 0.02));
+  const jars = [];
+  for (let i = 0; i < n; i++) {
+    const j = buildJar(0.34, false);
+    j.position.set(-len / 2 + 0.7 + (i * (len - 1.4)) / (n - 1), 0.86, 0);
+    g.add(j); jars.push(j);
+  }
+  g.userData.jars = jars;
+  return g;
+}
+
+export function buildCar() {
+  const g = new THREE.Group();
+  const bodyMat = new THREE.MeshStandardMaterial({ color: 0xe2e9f1, roughness: 0.45, metalness: 0.1 });
+  g.add(box(3.4, 0.7, 1.5, 0, 0.62, 0, bodyMat, 0.2));
+  g.add(box(1.9, 0.62, 1.36, -0.1, 1.18, 0, bodyMat, 0.22));
+  g.add(box(1.78, 0.46, 1.4, -0.1, 1.22, 0, darkGlass, 0.12));
+  const wheelGeo = new THREE.CylinderGeometry(0.32, 0.32, 0.24, 14);
+  wheelGeo.rotateX(Math.PI / 2);
+  const wm = new THREE.MeshStandardMaterial({ color: 0x3a4a72, roughness: 0.8 });
+  for (const [x, z] of [[-1.0, 0.72], [1.0, 0.72], [-1.0, -0.72], [1.0, -0.72]]) {
+    const w = new THREE.Mesh(wheelGeo, wm);
+    w.position.set(x, 0.32, z); w.castShadow = true; g.add(w);
+  }
+  return g;
+}
+
+export function buildStreetlamp() {
+  const g = new THREE.Group();
+  const pole = cyl(0.06, 0.09, 3.2, 8, accentMat);
+  pole.position.y = 1.6; g.add(pole);
+  g.add(box(0.85, 0.08, 0.08, 0.38, 3.2, 0, accentMat, 0.02));
+  g.add(box(0.5, 0.16, 0.26, 0.72, 3.12, 0, accentMat, 0.04));
+  const bulb = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.2), new THREE.MeshBasicMaterial({ color: 0xfff2cf }));
+  bulb.rotation.x = Math.PI / 2; bulb.position.set(0.72, 3.03, 0); g.add(bulb);
+  return g;
+}
+
+export function buildGardenBed() {
+  const g = new THREE.Group();
+  g.add(box(1.8, 0.24, 1.0, 0, 0.12, 0, woodMat, 0.03));
+  const rand = rng(9);
+  const colors = [0x4ca64c, 0x43b95f, 0x6fc98a, 0xe7b6c8];
+  for (let i = 0; i < 9; i++) {
+    const f = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 6),
+      new THREE.MeshStandardMaterial({ color: colors[Math.floor(rand() * colors.length)], roughness: 0.7 }));
+    f.position.set((rand() - 0.5) * 1.5, 0.3, (rand() - 0.5) * 0.8); g.add(f);
+  }
   return g;
 }
 

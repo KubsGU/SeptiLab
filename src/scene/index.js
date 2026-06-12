@@ -13,9 +13,11 @@ import {
   buildSprayDryer, buildCyclone, buildCentrifuge, buildPowderPile, buildSacks,
   buildJar, buildMixingVat, buildFlask,
   buildHouse, buildShed, buildWell, buildMailbox, buildFence, buildPath, buildDrainField, buildSepticCutaway,
+  buildRock, buildGrassTuft, buildLog, buildSilo, buildPallet, buildControlPanel,
+  buildLabBuilding, buildConveyorJars, buildCar, buildStreetlamp, buildGardenBed,
 } from './bio.js';
 import {
-  buildTrailDots, buildDotField, buildStrands, buildHeadGlow, buildBeam, buildPulseRing, GLOW_BLUE,
+  buildMergePath, buildHexMarker, buildStrands, buildHeadGlow, buildPulseRing, GLOW_BLUE, GLOW_GREEN,
 } from './trail.js';
 
 gsap.registerPlugin(ScrollTrigger);
@@ -47,6 +49,7 @@ export class App {
     this.time = 0;
     this.mouse = { x: 0, y: 0 };
     this.par = { x: 0, y: 0 };
+    this.pulse = { x: 0, y: 0 };
     this.activeStep = 0;
 
     this.fills = [];       // culture-fill shader materials (uTime)
@@ -221,12 +224,6 @@ export class App {
       this.smallJars.push(j);
     }
 
-    this.dotField = buildDotField(122, 0, 20, 8);
-    S.add(this.dotField);
-    this.beam = buildBeam(20, 3.4);
-    this.beam.position.set(129, 3.4, 0);
-    S.add(this.beam);
-
     /* ---- Zone 7: the product in use — home + cutaway septic tank (x ~ 153) */
     const home = new THREE.Group();
     const house = buildHouse(); house.position.set(158, 0, -4.5); house.rotation.y = -0.5; home.add(house);
@@ -259,34 +256,110 @@ export class App {
     S.add(homeSmoke);
     this.smoke.push(homeSmoke);
 
-    /* ---- the glowing culture path linking every zone (production → into the tank) */
-    const trailPts = [
-      [3, 0, 2.5], [14, 0, 3.4], [24, 0, 2], [30, 0, 0.6], [40, 0, -1], [50, 0, 0.5],
-      [60, 0, 1.6], [70, 0, 0.6], [80, 0, -0.5], [92, 0, 0.9], [102, 0, 0.3], [116, 0, 0.7],
-      [128, 0, 0.3], [138, 0, 1.1], [146, 0, 1.7], [150.5, 0, 2.0],
-    ].map((p) => new THREE.Vector3(...p));
-    this.trailCurve = new THREE.CatmullRomCurve3(trailPts, false, 'catmullrom', 0.5);
-
-    const findT = (x) => {
-      let bt = 0, best = Infinity;
-      const tmp = new THREE.Vector3();
-      for (let i = 0; i <= 600; i++) {
-        const t = i / 600;
-        this.trailCurve.getPointAt(t, tmp);
-        const d = Math.abs(tmp.x - x);
-        if (d < best) { best = d; bt = t; }
-      }
-      return bt;
+    /* ============================================================ density + feeder lines */
+    this.bubbleSys.push(this.cutaway.userData.bubbles);
+    this.feeders = [];
+    const feed = (hub, sources, arc = 1.8, alpha = 0.5) => {
+      const H = Array.isArray(hub) ? new THREE.Vector3(...hub) : hub;
+      const starts = sources.map((s) => new THREE.Vector3(...s));
+      const ends = sources.map(() => H.clone());
+      const f = buildStrands(starts, ends, arc, GLOW_GREEN, 0.026, alpha);
+      f.userData.mats.forEach((m) => (m.uniforms.uDraw.value = 1));
+      S.add(f);
+      this.feeders.push(f);
     };
+    const addTrees = (spots, seedBase) => spots.forEach(([x, z, s], i) => {
+      const t = buildTree((s || 1) + seedBase + i);
+      t.position.set(x, 0, z); S.add(t);
+      this.sways.push({ sway: t.userData.sway, base: t.userData.swayBase });
+    });
+    const addGrass = (spots, seedBase) => spots.forEach(([x, z], i) => {
+      const t = buildGrassTuft(seedBase + i);
+      t.position.set(x, 0, z); S.add(t);
+      this.sways.push({ sway: t.userData.sway, base: t.userData.swayBase });
+    });
+    const addRocks = (spots) => spots.forEach(([x, z], i) => { const r = buildRock(i + 2); r.position.set(x, 0, z); S.add(r); });
+
+    /* Zone 1 — nature: forest, rocks, grass, logs + lanes from ground & trees to the sample cauldron */
+    addTrees([[-9, -6, 4], [13, -4, 5], [-11, 3, 3], [8, 11, 4], [-4, -10, 2], [13, 8, 3], [-13, -2, 4], [4, 13, 3]], 20);
+    addRocks([[-4, -3], [9, -5], [-6, 6], [11, 3], [1, -8], [-9, 2], [6, 9], [3, 5]]);
+    addGrass([[-2, -4], [7, -3], [-5, 5], [10, 6], [2, 7], [-7, -2], [5, 2], [0, -6], [8, 1], [-3, 8], [12, -1], [-10, 5]], 40);
+    const log1 = buildLog(); log1.position.set(-4.5, 0, 3.5); log1.rotation.y = 0.6; S.add(log1);
+    const log2 = buildLog(); log2.position.set(9, 0, 7); log2.rotation.y = -0.4; S.add(log2);
+    feed([4, 1.0, 0], [[-5, 1.6, -5], [9, 1.8, -7], [-7, 1.4, 4], [11, 1.6, 5], [-2, 0.4, 1], [8, 0.4, 1.5], [-9, 0.4, 2], [3, 0.4, 5]], 2.4, 0.6);
+
+    /* Zone 2 — lab: building, control panels, pallets, feeders to the bench */
+    const labBld = buildLabBuilding(); labBld.position.set(24, 0, -7.5); labBld.rotation.y = 0.1; S.add(labBld);
+    const cp1 = buildControlPanel(); cp1.position.set(33, 0, -3.5); cp1.rotation.y = -0.6; S.add(cp1);
+    const pal1 = buildPallet(2); pal1.position.set(22.5, 0, 3); S.add(pal1);
+    addGrass([[20, 4], [37, 2], [25, -4]], 60);
+    feed([28, 1.6, -1], [[24, 2.6, -6], [33, 1.4, -3.2], [22.6, 1.0, 3], [31, 0.4, 2]], 1.8, 0.5);
+
+    /* Zone 3 — inoc: extra fermenters, silo, control panel, pallets */
+    const fr4 = buildSmallFermenter(0.78); fr4.position.set(49.5, 0, -2.5); S.add(fr4); this.collect(fr4); this.fermenters.push(fr4);
+    const fr5 = buildSmallFermenter(0.62); fr5.position.set(56.5, 0, 1.5); S.add(fr5); this.collect(fr5); this.fermenters.push(fr5);
+    const silo3 = buildSilo(0.7); silo3.position.set(58, 0, -4); S.add(silo3);
+    const cp3 = buildControlPanel(); cp3.position.set(47, 0, 5.5); cp3.rotation.y = 0.5; S.add(cp3);
+    const pal3 = buildPallet(3); pal3.position.set(58.5, 0, 5); S.add(pal3);
+    feed([52, 1.6, -2], [[49.5, 1.2, -2.5], [56.5, 1.0, 1.5], [58, 2.2, -4], [49, 0.5, 3.5]], 1.6, 0.5);
+
+    /* Zone 4 — bioreactor: silos, 3rd reactor, control room, pallets, pipe bridges */
+    const r3 = buildBioreactor(0.62); r3.position.set(82.5, 0, 4); S.add(r3); this.collect(r3); this.reactors.push(r3);
+    const silo4a = buildSilo(1.0); silo4a.position.set(85, 0, -5.5); S.add(silo4a);
+    const silo4b = buildSilo(0.85); silo4b.position.set(88, 0, -3); S.add(silo4b);
+    const cp4 = buildControlPanel(); cp4.position.set(74, 0, -4.5); cp4.rotation.y = 0.4; S.add(cp4);
+    const pal4 = buildPallet(2); pal4.position.set(72, 0, 5.5); S.add(pal4);
+    S.add(buildPipeRun(new THREE.Vector3(84, 2.5, -4), new THREE.Vector3(81, 2.2, -1.4), 0.1));
+    feed([79, 3.0, -1], [[82.5, 1.4, 4], [85, 3.0, -5.5], [74, 1.0, -4], [88, 2.6, -3]], 2.2, 0.5);
+
+    /* Zone 5 — drying: silos, conveyor, second cyclone, pallets */
+    const silo5 = buildSilo(1.1); silo5.position.set(98, 0, -5.5); S.add(silo5);
+    const cyc5 = buildCyclone(0.7); cyc5.position.set(106, 0, -2.5); S.add(cyc5);
+    this.conveyor5 = buildConveyorJars(6, 6); this.conveyor5.position.set(104, 0, 5.5); this.conveyor5.rotation.y = -0.3; S.add(this.conveyor5);
+    const pal5a = buildPallet(3); pal5a.position.set(108, 0, 4); S.add(pal5a);
+    const pal5b = buildPallet(2); pal5b.position.set(96, 0, 5.5); S.add(pal5b);
+    feed([102, 2.2, -1], [[98, 3.2, -5.5], [106, 1.6, -2.5], [104, 1.0, 5.5]], 2.0, 0.5);
+
+    /* Zone 6 — packaging: conveyor of jars, pallets, delivery car */
+    this.conveyor6 = buildConveyorJars(7, 8); this.conveyor6.position.set(126, 0, 4.5); this.conveyor6.rotation.y = -0.2; S.add(this.conveyor6);
+    const pal6a = buildPallet(3); pal6a.position.set(122, 0, 6.5); S.add(pal6a);
+    const pal6b = buildPallet(3); pal6b.position.set(124.5, 0, 6.8); S.add(pal6b);
+    const car6 = buildCar(); car6.position.set(135, 0, 6.5); car6.rotation.y = 0.5; S.add(car6);
+    const cp6 = buildControlPanel(); cp6.position.set(124, 0, -3.5); cp6.rotation.y = -0.4; S.add(cp6);
+
+    /* Zone 7 — home: neighbour house, car, streetlamps, garden beds, more trees + lanes into the tank */
+    const house2 = buildHouse(); house2.position.set(168, 0, 6); house2.rotation.y = -1.4; house2.scale.setScalar(0.9); S.add(house2);
+    const car7 = buildCar(); car7.position.set(160, 0, -6.5); car7.rotation.y = -0.3; S.add(car7);
+    const lamp1 = buildStreetlamp(); lamp1.position.set(146, 0, -2); S.add(lamp1);
+    const lamp2 = buildStreetlamp(); lamp2.position.set(150, 0, 8); lamp2.rotation.y = Math.PI; S.add(lamp2);
+    const bed1 = buildGardenBed(); bed1.position.set(156, 0, 6.5); S.add(bed1);
+    const bed2 = buildGardenBed(); bed2.position.set(149, 0, 4.5); bed2.rotation.y = 0.5; S.add(bed2);
+    addTrees([[170, -3, 4], [144, 4, 3], [167, 9, 3], [172, 2, 4]], 30);
+    addGrass([[147, -4], [158, 7], [164, 4], [150, 6], [161, -3]], 80);
+    addRocks([[148, -6], [163, 8], [155, 7.5]]);
+    feed([152, 1.6, 2], [[158, 2.2, -4], [159, 0.6, 5.5], [146, 1.4, -2], [150, 1.0, 5]], 2.0, 0.5);
+
+    /* ---- one straight glowing culture line running the journey into the tank */
+    const xStart = 2, xEnd = 151;
+    this.path = buildMergePath({ xStart, xEnd, y: 0.16, zEnd: 2 });
+    S.add(this.path);
+    this.pathSpan = { xStart, xEnd, zEnd: 2 };
+    const prog = (x) => (x - xStart) / (xEnd - xStart);
     this.tZone = {
-      nature: findT(8), lab: findT(30), inoc: findT(53), bioreactor: findT(78),
-      drying: findT(102), product: findT(131), home: 1,
+      nature: prog(9), lab: prog(30), inoc: prog(53), bioreactor: prog(78),
+      drying: prog(102), product: prog(127), home: 1,
     };
-
-    this.trail = buildTrailDots(this.trailCurve, { count: 3400, width: 1.5 });
-    S.add(this.trail);
     this.headGlow = buildHeadGlow();
     S.add(this.headGlow);
+
+    // dotted-hexagon markers the line triggers as it passes each stage
+    this.hexMarkers = [];
+    [[4, 0], [28, -1], [52, -1.5], [79, -1], [102, -1], [131, -0.5], [152, 1.8]].forEach(([x, z]) => {
+      const m = buildHexMarker(3.0);
+      m.position.set(x, 0.08, z);
+      S.add(m);
+      this.hexMarkers.push({ m, prog: prog(x) });
+    });
   }
 
   initCamera() {
@@ -324,7 +397,7 @@ export class App {
     const tl = gsap.timeline({
       defaults: { ease: 'none' },
       scrollTrigger: {
-        trigger: '.top', start: 'top top', end: 'bottom bottom', scrub: 0.9,
+        trigger: '.top', start: 'top top', end: 'bottom bottom', scrub: 0.55,
         onUpdate: (st) => this.onScroll(st.progress, onStepChange),
       },
     });
@@ -347,8 +420,8 @@ export class App {
     seg(82, 88, Z.product, Z.home);
     seg(94, 100, Z.home, Z.homeClose);
 
-    // culture head advancing along the path, all the way into the tank
-    const head = this.trail.material.uniforms.uHead;
+    // culture head advancing along the lanes, all the way into the tank
+    const head = this.path.userData.head;
     const T = this.tZone;
     tl.to(head, { value: T.nature, duration: 5, ease: 'power1.in' }, 9);
     tl.to(head, { value: T.lab, duration: 8 }, 20);
@@ -357,7 +430,7 @@ export class App {
     tl.to(head, { value: T.drying, duration: 7 }, 60);
     tl.to(head, { value: T.product, duration: 7 }, 71);
     tl.to(head, { value: T.home, duration: 7, ease: 'power1.in' }, 84);
-    tl.to(this.trail.material.uniforms.uFade, { value: 0.3, duration: 5 }, 91);
+    tl.to(this.path.userData.fade, { value: 0.32, duration: 5 }, 91);
 
     /* Z1 — sampling glow */
     tl.fromTo(this.sampleStation.userData.fill.userData.mat.uniforms.uLevel, { value: 0.35 }, { value: 0.72, duration: 3.5, yoyo: true, repeat: 1 }, 9);
@@ -385,12 +458,6 @@ export class App {
 
     /* Z6 — formulation + product reveal */
     tl.fromTo(this.mixingVat.userData.fill.userData.mat.uniforms.uLevel, { value: 0 }, { value: 0.8, duration: 5 }, 76);
-    tl.to(this.dotField.material.uniforms.uWave, { value: 1.1, duration: 8, ease: 'power1.in' }, 76);
-    const { plane, mat: beamMat, flare } = this.beam.userData;
-    plane.scale.x = 0.04;
-    tl.to(plane.scale, { x: 1, duration: 5, ease: 'power3.in' }, 77);
-    tl.to(beamMat, { opacity: 0.75, duration: 3 }, 77);
-    tl.to(flare.material, { opacity: 0.7, duration: 1.6 }, 80);
     tl.to(this.jar.userData.halo.material, { opacity: 0.5, duration: 2.2, ease: 'power2.in' }, 80);
     tl.to(this.jar.userData.halo.material, { opacity: 0.3, duration: 3 }, 83);
     this.smallJars.forEach((j, i) => { j.scale.setScalar(0.01); tl.to(j.scale, { x: 1, y: 1, z: 1, duration: 1.0, ease: 'back.out(1.8)' }, 78 + i * 0.4); });
@@ -422,18 +489,30 @@ export class App {
     this.stepFill = fill;
   }
 
+  // a brief parallax kick (like a mouse hover) when a step is stepped over
+  stepPulse() {
+    this._pulseDir = -(this._pulseDir || 1);
+    this.pulse.x = 0.8 * this._pulseDir;
+    this.pulse.y = -0.45;
+  }
+
   update(dt) {
     this.time += dt;
     const t = this.time;
 
-    this.par.x += (this.mouse.x - this.par.x) * Math.min(1, dt * 3.2);
-    this.par.y += (this.mouse.y - this.par.y) * Math.min(1, dt * 3.2);
+    // gentle damped pointer parallax, matched to vectrfl (offset *0.6, 1-exp(-1.5*dt))
+    const u = 1 - Math.exp(-1.5 * dt);
+    this.par.x += (this.mouse.x - this.par.x) * u;
+    this.par.y += (this.mouse.y - this.par.y) * u;
+    this.pulse.x *= 0.9;
+    this.pulse.y *= 0.9;
     const cam = this.camera;
     cam.position.copy(this.camPos);
     _dir.copy(this.camTgt).sub(this.camPos).normalize();
     _right.crossVectors(_dir, _UP).normalize();
     _up.crossVectors(_right, _dir).normalize();
-    cam.position.addScaledVector(_right, this.par.x * 0.8).addScaledVector(_up, -this.par.y * 0.5);
+    const px = this.par.x + this.pulse.x, py = this.par.y + this.pulse.y;
+    cam.position.addScaledVector(_right, px * 0.6).addScaledVector(_up, -py * 0.6);
     cam.lookAt(this.camTgt);
 
     for (const f of this.fills) f.uniforms.uTime.value = t;
@@ -464,20 +543,31 @@ export class App {
       }
     }
 
-    // culture head glow sprite
-    const tm = this.trail?.material;
-    if (tm) {
-      tm.uniforms.uTime.value = t;
-      const h = tm.uniforms.uHead.value;
-      if (h > 0.004 && h < 0.995) {
-        this.trailCurve.getPointAt(Math.min(h, 1), this.headGlow.position);
-        this.headGlow.position.y = 0.2;
-        this.headGlow.scale.setScalar(0.78 * (1 + Math.sin(t * 5) * 0.08));
-        this.headGlow.material.opacity = 0.2 * tm.uniforms.uFade.value;
+    // culture head glow sprite rides the merged line tip
+    const pd = this.path?.userData;
+    if (pd) {
+      pd.time.value = t;
+      const h = pd.head.value;
+      if (h > 0.01 && h < 0.997) {
+        const x = this.pathSpan.xStart + h * (this.pathSpan.xEnd - this.pathSpan.xStart);
+        const z = this.pathSpan.zEnd * smoothstep(0.9, 1.0, h);
+        this.headGlow.position.set(x, 0.24, z);
+        this.headGlow.scale.setScalar(1.0 * (1 + Math.sin(t * 5) * 0.1));
+        this.headGlow.material.opacity = 0.3 * pd.fade.value;
       } else this.headGlow.material.opacity = 0;
     }
-    if (this.dotField) this.dotField.material.uniforms.uTime.value = t;
     for (const m of this.strands?.userData.mats || []) m.uniforms.uTime.value = t;
+    for (const f of this.feeders || []) for (const m of f.userData.mats) m.uniforms.uTime.value = t;
+
+    // dotted hexagons pulse as the culture line passes through each stage
+    const hh = this.path ? this.path.userData.head.value : 0;
+    for (const { m, prog: p } of this.hexMarkers || []) {
+      const inten = Math.exp(-Math.pow((hh - p) * 7.0, 2));
+      m.userData.mat.opacity = inten * 0.95;
+      const s = 0.55 + inten * 0.75;
+      m.scale.set(s, s, s);
+      m.rotation.z = t * 0.4;
+    }
 
     // tank "magic": health drives the liquid, bacteria swarm and waste dissolve
     if (this.cutaway) {
@@ -487,6 +577,13 @@ export class App {
       u.liquid.uniforms.uTime.value = t;
       u.bacteria.uniforms.uHealth.value = v;
       u.bacteria.uniforms.uTime.value = t;
+      u.bubbles.userData.active = Math.max(0, (v - 0.2) / 0.8);
+      for (const w of u.wisps) {
+        const k = (t * 0.2 + w.phase) % 1;
+        w.s.position.set(w.x + Math.sin(t + w.phase * 6) * 0.2, u.tankTop + k * 1.6, 0.4);
+        w.s.scale.setScalar(0.6 + k * 1.3);
+        w.s.material.opacity = (1 - v) * Math.max(0, 1 - k) * 0.5;
+      }
       const wd = u.waste.userData;
       for (let i = 0; i < wd.count; i++) {
         const p = wd.data[i];
