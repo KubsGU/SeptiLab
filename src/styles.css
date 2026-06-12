@@ -89,8 +89,8 @@ a { color: inherit; text-decoration: none; }
 .hsbtn-in { display: block; }
 .hero-spacer { height: 60vh; }
 
-/* ---------- flow (6 steps) ---------- */
-.flow { height: 760vh; position: relative; }
+/* ---------- flow (7 steps) ---------- */
+.flow { height: 880vh; position: relative; }
 .flow__pin { position: sticky; top: 0; height: 100vh; display: flex; align-items: flex-end; padding: 0 0 34px 34px; }
 .flow__steps { width: 430px; }
 .flow__header { display: flex; align-items: center; gap: 12px; padding: 7px 0; opacity: 0.45; transition: opacity 0.4s; }

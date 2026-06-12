@@ -2,5 +2,7 @@ node_modules/
 dist/
 shots*/
 shots-extra/
-bio*/
+bio[0-9]*/
+home*/
 !src/scene/bio.js
+*.mp4

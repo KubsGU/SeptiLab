@@ -12,6 +12,7 @@ import {
   buildLabBench, buildSmallFermenter, buildShakerTable, buildBioreactor, buildPipeRun,
   buildSprayDryer, buildCyclone, buildCentrifuge, buildPowderPile, buildSacks,
   buildJar, buildMixingVat, buildFlask,
+  buildHouse, buildShed, buildWell, buildMailbox, buildFence, buildPath, buildDrainField, buildSepticCutaway,
 } from './bio.js';
 import {
   buildTrailDots, buildDotField, buildStrands, buildHeadGlow, buildBeam, buildPulseRing, GLOW_BLUE,
@@ -27,7 +28,17 @@ const STATIONS = {
   bioreactor: { pos: [60, 15, 26], tgt: [79, 3, -1] },
   drying: { pos: [85, 16, 27], tgt: [104, 3.5, -1] },
   product: { pos: [112, 9, 24], tgt: [131, 4, -1] },
-  productClose: { pos: [121, 7.5, 18.5], tgt: [131, 4, -0.5] },
+  home: { pos: [140, 11, 26], tgt: [154, 2.6, 0] },
+  homeClose: { pos: [145.5, 6, 15.5], tgt: [152.5, 2.0, 2] },
+};
+
+const _UP = new THREE.Vector3(0, 1, 0);
+const _dir = new THREE.Vector3();
+const _right = new THREE.Vector3();
+const _up = new THREE.Vector3();
+const smoothstep = (a, b, x) => {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
 };
 
 export class App {
@@ -216,12 +227,45 @@ export class App {
     this.beam.position.set(129, 3.4, 0);
     S.add(this.beam);
 
-    /* ---- the glowing culture path linking every zone ---- */
+    /* ---- Zone 7: the product in use — home + cutaway septic tank (x ~ 153) */
+    const home = new THREE.Group();
+    const house = buildHouse(); house.position.set(158, 0, -4.5); house.rotation.y = -0.5; home.add(house);
+    const shed = buildShed(); shed.position.set(163, 0, 3); shed.rotation.y = -0.6; home.add(shed);
+    const well = buildWell(); well.position.set(162, 0, -1); home.add(well);
+    const mailbox = buildMailbox(); mailbox.position.set(145, 0, 7.2); home.add(mailbox);
+    home.add(buildFence([[143, -8], [167, -8], [167, 9], [143, 9]], 0.95));
+    home.add(buildPath([[150.5, 5.5], [151.5, 4.2], [152.5, 3], [153.5, 1.8], [156, 0], [157.5, -1.6]]));
+    [[145, -5, 4], [165, -6, 5], [146, 2, 3], [166, 6, 4], [160, 8, 2]].forEach(([x, z, s], i) => {
+      const t = buildTree(s + i); t.position.set(x, 0, z); home.add(t);
+      this.sways.push({ sway: t.userData.sway, base: t.userData.swayBase });
+    });
+    [[148, 6], [164, -3], [150, -7]].forEach(([x, z], i) => {
+      const b = buildBush(i + 5); b.position.set(x, 0, z); home.add(b);
+      this.sways.push({ sway: b.userData.sway, base: b.userData.swayBase });
+    });
+    const drain = buildDrainField(); drain.position.set(159, 0, 5.5); drain.rotation.y = 0.2; home.add(drain);
+    home.add(scatterFigures([[154, 4.5, -2.4], [149.5, -2, 1]]));
+    S.add(home);
+
+    this.cutaway = buildSepticCutaway();
+    this.cutaway.position.set(152, 0, 2);
+    S.add(this.cutaway);
+    this.tankHealth = { v: 0 };
+    // mist from the house chimney
+    const homeSmoke = buildSmokeColumn(makeSmokeTexture(), 2);
+    homeSmoke.position.copy(house.position).add(house.userData.chimneyTop.clone().applyEuler(house.rotation));
+    homeSmoke.userData.scale = 0.5;
+    homeSmoke.userData.active = 1;
+    S.add(homeSmoke);
+    this.smoke.push(homeSmoke);
+
+    /* ---- the glowing culture path linking every zone (production → into the tank) */
     const trailPts = [
-      [3, 0, 3.5], [12, 0, 5], [20, 0, 3], [28, 0, 1.5], [38, 0, -1.2], [48, 0, 0.6],
-      [58, 0, 2.4], [68, 0, 1], [78, 0, -0.6], [90, 0, 1.4], [102, 0, 0.4], [115, 0, 1], [128, 0, 0.2],
+      [3, 0, 2.5], [14, 0, 3.4], [24, 0, 2], [30, 0, 0.6], [40, 0, -1], [50, 0, 0.5],
+      [60, 0, 1.6], [70, 0, 0.6], [80, 0, -0.5], [92, 0, 0.9], [102, 0, 0.3], [116, 0, 0.7],
+      [128, 0, 0.3], [138, 0, 1.1], [146, 0, 1.7], [150.5, 0, 2.0],
     ].map((p) => new THREE.Vector3(...p));
-    this.trailCurve = new THREE.CatmullRomCurve3(trailPts, false, 'catmullrom', 0.4);
+    this.trailCurve = new THREE.CatmullRomCurve3(trailPts, false, 'catmullrom', 0.5);
 
     const findT = (x) => {
       let bt = 0, best = Infinity;
@@ -235,7 +279,8 @@ export class App {
       return bt;
     };
     this.tZone = {
-      nature: findT(8), lab: findT(30), inoc: findT(53), bioreactor: findT(78), drying: findT(102), product: 1,
+      nature: findT(8), lab: findT(30), inoc: findT(53), bioreactor: findT(78),
+      drying: findT(102), product: findT(131), home: 1,
     };
 
     this.trail = buildTrailDots(this.trailCurve, { count: 3400, width: 1.5 });
@@ -293,78 +338,75 @@ export class App {
       tl.to(tgt, { x: to.tgt[0], y: to.tgt[1], z: to.tgt[2], duration: b - a, ease }, a);
     };
     const Z = STATIONS;
-    seg(8, 16, Z.hero, Z.nature);
-    seg(24, 31, Z.nature, Z.lab);
-    seg(40, 47, Z.lab, Z.inoc);
-    seg(56, 63, Z.inoc, Z.bioreactor);
-    seg(73, 80, Z.bioreactor, Z.drying);
-    seg(89, 95, Z.drying, Z.product);
-    seg(95, 100, Z.product, Z.productClose);
+    seg(8, 14, Z.hero, Z.nature);
+    seg(20, 27, Z.nature, Z.lab);
+    seg(33, 40, Z.lab, Z.inoc);
+    seg(46, 53, Z.inoc, Z.bioreactor);
+    seg(60, 65, Z.bioreactor, Z.drying);
+    seg(71, 76, Z.drying, Z.product);
+    seg(82, 88, Z.product, Z.home);
+    seg(94, 100, Z.home, Z.homeClose);
 
-    // culture head advancing along the path
+    // culture head advancing along the path, all the way into the tank
     const head = this.trail.material.uniforms.uHead;
-    tl.to(head, { value: this.tZone.nature, duration: 6, ease: 'power1.in' }, 18);
-    tl.to(head, { value: this.tZone.lab, duration: 8 }, 24);
-    tl.to(head, { value: this.tZone.inoc, duration: 8 }, 40);
-    tl.to(head, { value: this.tZone.bioreactor, duration: 8 }, 56);
-    tl.to(head, { value: this.tZone.drying, duration: 8 }, 73);
-    tl.to(head, { value: this.tZone.product, duration: 9, ease: 'power1.in' }, 86);
+    const T = this.tZone;
+    tl.to(head, { value: T.nature, duration: 5, ease: 'power1.in' }, 9);
+    tl.to(head, { value: T.lab, duration: 8 }, 20);
+    tl.to(head, { value: T.inoc, duration: 8 }, 33);
+    tl.to(head, { value: T.bioreactor, duration: 8 }, 46);
+    tl.to(head, { value: T.drying, duration: 7 }, 60);
+    tl.to(head, { value: T.product, duration: 7 }, 71);
+    tl.to(head, { value: T.home, duration: 7, ease: 'power1.in' }, 84);
+    tl.to(this.trail.material.uniforms.uFade, { value: 0.3, duration: 5 }, 91);
 
     /* Z1 — sampling glow */
-    const sf = this.sampleStation.userData.fill.userData.mat.uniforms.uLevel;
-    tl.fromTo(sf, { value: 0.35 }, { value: 0.72, duration: 4, yoyo: true, repeat: 1 }, 16);
+    tl.fromTo(this.sampleStation.userData.fill.userData.mat.uniforms.uLevel, { value: 0.35 }, { value: 0.72, duration: 3.5, yoyo: true, repeat: 1 }, 9);
 
     /* Z2 — analysis beams + culture in hero flask */
-    this.strands.userData.mats.forEach((m, i) =>
-      tl.to(m.uniforms.uDraw, { value: 1, duration: 5, ease: 'power1.in' }, 31 + i * 0.7)
-    );
+    this.strands.userData.mats.forEach((m, i) => tl.to(m.uniforms.uDraw, { value: 1, duration: 5, ease: 'power1.in' }, 27 + i * 0.6));
     if (this.labBench.userData.heroFlask)
-      tl.fromTo(this.labBench.userData.heroFlask.userData.fill.userData.mat.uniforms.uLevel,
-        { value: 0 }, { value: 0.66, duration: 5 }, 33);
-    this.strands.userData.mats.forEach((m) => tl.to(m.uniforms.uDraw, { value: 1.25, duration: 4 }, 44));
+      tl.fromTo(this.labBench.userData.heroFlask.userData.fill.userData.mat.uniforms.uLevel, { value: 0 }, { value: 0.66, duration: 5 }, 29);
+    this.strands.userData.mats.forEach((m) => tl.to(m.uniforms.uDraw, { value: 1.25, duration: 4 }, 38));
 
     /* Z3 — fermenters fill */
-    this.fermenters.forEach((fr, i) =>
-      tl.fromTo(fr.userData.fill.userData.mat.uniforms.uLevel, { value: 0 }, { value: 0.86, duration: 6 }, 47 + i * 1.2)
-    );
-    this.shaker.userData.flasks.forEach((f, i) =>
-      tl.fromTo(f.userData.fill.userData.mat.uniforms.uLevel, { value: 0.2 }, { value: 0.66, duration: 4 }, 48 + i * 0.3)
-    );
+    this.fermenters.forEach((fr, i) => tl.fromTo(fr.userData.fill.userData.mat.uniforms.uLevel, { value: 0 }, { value: 0.86, duration: 6 }, 40 + i * 1.2));
+    this.shaker.userData.flasks.forEach((f, i) => tl.fromTo(f.userData.fill.userData.mat.uniforms.uLevel, { value: 0.2 }, { value: 0.66, duration: 4 }, 41 + i * 0.3));
 
     /* Z4 — bioreactor fills + bubbles + pulse */
-    this.reactors.forEach((r, i) =>
-      tl.fromTo(r.userData.fill.userData.mat.uniforms.uLevel, { value: 0 }, { value: 0.9, duration: 8, ease: 'power1.inOut' }, 63 + i * 1.5)
-    );
-    this.reactors.forEach((r) => tl.fromTo(r.userData.bubbles.userData, { active: 0 }, { active: 1, duration: 5 }, 65));
-    const prm = this.reactorPulse.material;
-    tl.fromTo(this.reactorPulse.scale, { x: 0.01, y: 0.01, z: 0.01 }, { x: 13, y: 13, z: 13, duration: 6, ease: 'power2.out' }, 64);
-    tl.fromTo(prm.uniforms.uOpacity, { value: 0.4 }, { value: 0, duration: 4 }, 66);
+    this.reactors.forEach((r, i) => tl.fromTo(r.userData.fill.userData.mat.uniforms.uLevel, { value: 0 }, { value: 0.9, duration: 8, ease: 'power1.inOut' }, 53 + i * 1.5));
+    this.reactors.forEach((r) => tl.fromTo(r.userData.bubbles.userData, { active: 0 }, { active: 1, duration: 5 }, 55));
+    tl.fromTo(this.reactorPulse.scale, { x: 0.01, y: 0.01, z: 0.01 }, { x: 13, y: 13, z: 13, duration: 6, ease: 'power2.out' }, 54);
+    tl.fromTo(this.reactorPulse.material.uniforms.uOpacity, { value: 0.4 }, { value: 0, duration: 4 }, 56);
 
     /* Z5 — drying: mist + powder grows */
-    tl.fromTo(this.smoke[0].userData, { active: 0 }, { active: 1, duration: 5 }, 80);
-    tl.fromTo(this.powder.scale, { x: 0.01, y: 0.01, z: 0.01 }, { x: 1, y: 1, z: 1, duration: 6, ease: 'power2.out' }, 81);
-    tl.fromTo(this.powder.userData.spark.material, { opacity: 0 }, { opacity: 0.7, duration: 3, yoyo: true, repeat: 1 }, 83);
+    tl.fromTo(this.smoke[0].userData, { active: 0 }, { active: 1, duration: 5 }, 65);
+    tl.fromTo(this.powder.scale, { x: 0.01, y: 0.01, z: 0.01 }, { x: 1, y: 1, z: 1, duration: 6, ease: 'power2.out' }, 66);
+    tl.fromTo(this.powder.userData.spark.material, { opacity: 0 }, { opacity: 0.7, duration: 3, yoyo: true, repeat: 1 }, 68);
 
     /* Z6 — formulation + product reveal */
-    tl.fromTo(this.mixingVat.userData.fill.userData.mat.uniforms.uLevel, { value: 0 }, { value: 0.8, duration: 5 }, 89);
-    tl.to(this.dotField.material.uniforms.uWave, { value: 1.1, duration: 9, ease: 'power1.in' }, 89);
+    tl.fromTo(this.mixingVat.userData.fill.userData.mat.uniforms.uLevel, { value: 0 }, { value: 0.8, duration: 5 }, 76);
+    tl.to(this.dotField.material.uniforms.uWave, { value: 1.1, duration: 8, ease: 'power1.in' }, 76);
     const { plane, mat: beamMat, flare } = this.beam.userData;
     plane.scale.x = 0.04;
-    tl.to(plane.scale, { x: 1, duration: 5, ease: 'power3.in' }, 90);
-    tl.to(beamMat, { opacity: 0.75, duration: 3.2 }, 90);
-    tl.to(flare.material, { opacity: 0.7, duration: 1.6 }, 94);
-    tl.to(this.jar.userData.halo.material, { opacity: 0.5, duration: 2.4, ease: 'power2.in' }, 94);
-    tl.to(this.jar.userData.halo.material, { opacity: 0.28, duration: 3 }, 97);
-    this.smallJars.forEach((j, i) => {
-      j.scale.setScalar(0.01);
-      tl.to(j.scale, { x: 1, y: 1, z: 1, duration: 1.0, ease: 'back.out(1.8)' }, 92 + i * 0.5);
-    });
-    tl.to(this.beam.userData.flare.material, { opacity: 0.45, duration: 4 }, 97.5);
+    tl.to(plane.scale, { x: 1, duration: 5, ease: 'power3.in' }, 77);
+    tl.to(beamMat, { opacity: 0.75, duration: 3 }, 77);
+    tl.to(flare.material, { opacity: 0.7, duration: 1.6 }, 80);
+    tl.to(this.jar.userData.halo.material, { opacity: 0.5, duration: 2.2, ease: 'power2.in' }, 80);
+    tl.to(this.jar.userData.halo.material, { opacity: 0.3, duration: 3 }, 83);
+    this.smallJars.forEach((j, i) => { j.scale.setScalar(0.01); tl.to(j.scale, { x: 1, y: 1, z: 1, duration: 1.0, ease: 'back.out(1.8)' }, 78 + i * 0.4); });
+
+    /* Z7 — pour the dose into the tank, the magic, a healthy tank */
+    const dose = this.cutaway.userData.dose;
+    const H = this.cutaway.userData.size.h;
+    tl.to(dose.position, { y: H + 0.3, duration: 2.6, ease: 'power2.in' }, 85);
+    tl.to(dose.userData.powder.scale, { x: 0.02, y: 0.02, z: 0.02, duration: 1.3, ease: 'power1.in' }, 87.6);
+    tl.fromTo(dose.userData.burst.material, { opacity: 0 }, { opacity: 0.9, duration: 1.0, yoyo: true, repeat: 1 }, 87.8);
+    tl.to(this.tankHealth, { v: 1, duration: 11, ease: 'power1.inOut' }, 88);
   }
 
   onScroll(p, onStepChange) {
     const ranges = [
-      [0.16, 0.30], [0.30, 0.44], [0.44, 0.57], [0.57, 0.71], [0.71, 0.86], [0.86, 1.001],
+      [0.10, 0.24], [0.24, 0.37], [0.37, 0.50], [0.50, 0.62], [0.62, 0.73], [0.73, 0.84], [0.84, 1.001],
     ];
     let step = 0, fill = 0;
     for (let i = 0; i < ranges.length; i++) {
@@ -384,13 +426,15 @@ export class App {
     this.time += dt;
     const t = this.time;
 
-    this.par.x += (this.mouse.x - this.par.x) * Math.min(1, dt * 4);
-    this.par.y += (this.mouse.y - this.par.y) * Math.min(1, dt * 4);
-    this.camera.position.copy(this.camPos);
-    this.camera.lookAt(this.camTgt);
-    this.camera.translateX(this.par.x * 0.7);
-    this.camera.translateY(-this.par.y * 0.45);
-    this.camera.lookAt(this.camTgt);
+    this.par.x += (this.mouse.x - this.par.x) * Math.min(1, dt * 3.2);
+    this.par.y += (this.mouse.y - this.par.y) * Math.min(1, dt * 3.2);
+    const cam = this.camera;
+    cam.position.copy(this.camPos);
+    _dir.copy(this.camTgt).sub(this.camPos).normalize();
+    _right.crossVectors(_dir, _UP).normalize();
+    _up.crossVectors(_right, _dir).normalize();
+    cam.position.addScaledVector(_right, this.par.x * 0.8).addScaledVector(_up, -this.par.y * 0.5);
+    cam.lookAt(this.camTgt);
 
     for (const f of this.fills) f.uniforms.uTime.value = t;
     for (const { m, speed } of this.motors) m.rotation.y = t * speed;
@@ -434,6 +478,26 @@ export class App {
     }
     if (this.dotField) this.dotField.material.uniforms.uTime.value = t;
     for (const m of this.strands?.userData.mats || []) m.uniforms.uTime.value = t;
+
+    // tank "magic": health drives the liquid, bacteria swarm and waste dissolve
+    if (this.cutaway) {
+      const v = this.tankHealth.v;
+      const u = this.cutaway.userData;
+      u.liquid.uniforms.uHealth.value = v;
+      u.liquid.uniforms.uTime.value = t;
+      u.bacteria.uniforms.uHealth.value = v;
+      u.bacteria.uniforms.uTime.value = t;
+      const wd = u.waste.userData;
+      for (let i = 0; i < wd.count; i++) {
+        const p = wd.data[i];
+        const vis = 1 - smoothstep(p.thresh - 0.08, p.thresh + 0.08, v);
+        wd.dummy.position.set(p.x, p.y, p.z);
+        wd.dummy.scale.set(p.s * p.sx * vis, p.s * p.sy * vis, p.s * p.sz * vis);
+        wd.dummy.updateMatrix();
+        u.waste.setMatrixAt(i, wd.dummy.matrix);
+      }
+      u.waste.instanceMatrix.needsUpdate = true;
+    }
 
     if (this.activeStep > 0 && this.stepFill !== this._lastFill) {
       this._lastFill = this.stepFill;

@@ -32,17 +32,16 @@ await page.screenshot({ path: path.join(OUT, '00-hero.png') });
 const topH = await page.evaluate(() => document.querySelector('.top').offsetHeight - innerHeight);
 
 const stops = [
-  ['05-hero-mid', 0.045],
-  ['10-flight-to-hq', 0.17],
-  ['15-step1-hq', 0.30],
-  ['20-step1-end', 0.40],
-  ['25-step2-warehouse', 0.50],
-  ['30-step2-end', 0.60],
-  ['35-step3-grid', 0.68],
-  ['40-step3-pulse', 0.74],
-  ['45-step4-travel', 0.83],
-  ['50-step4-beam', 0.91],
-  ['55-step4-end', 0.985],
+  ['05-nature', 0.16],
+  ['10-lab', 0.30],
+  ['15-inoc', 0.43],
+  ['20-bioreactor', 0.56],
+  ['25-drying', 0.67],
+  ['30-product', 0.79],
+  ['35-home-arrive', 0.86],
+  ['40-home-dose', 0.90],
+  ['45-home-magic', 0.95],
+  ['50-home-healthy', 0.995],
 ];
 
 for (const [name, frac] of stops) {

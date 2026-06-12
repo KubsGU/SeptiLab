@@ -721,5 +721,323 @@ export function buildMixingVat(scale = 1) {
   return g;
 }
 
+/* ============================================================ ZONE 7 — the product in use (home + septic tank)
+   "to po prostu proszek — wsypujesz do szamba, dzieje się magia,
+    i szambo jest zdrowe; utrzymuje odpowiednią pracę zbiornika." */
+
+const roofMat = new THREE.MeshStandardMaterial({ color: 0x3c4d7a, roughness: 0.7 });
+const woodMat = new THREE.MeshStandardMaterial({ color: 0xdfe6ee, roughness: 0.9 });
+const gravelMat = new THREE.MeshStandardMaterial({ color: 0xcdd7e1, roughness: 1 });
+
+export function buildHouse() {
+  const g = new THREE.Group();
+  g.add(box(4.6, 3.0, 3.6, 0, 1.5, 0)); // walls
+  // gable roof (triangular prism)
+  const tri = new THREE.Shape();
+  tri.moveTo(-2.55, 0); tri.lineTo(2.55, 0); tri.lineTo(0, 1.8); tri.closePath();
+  const roof = new THREE.Mesh(new THREE.ExtrudeGeometry(tri, { depth: 3.9, bevelEnabled: false }), roofMat);
+  roof.position.set(0, 3.0, -1.95);
+  roof.castShadow = true;
+  g.add(roof);
+  // chimney
+  const chim = box(0.5, 1.2, 0.5, 1.4, 3.9, -0.6, roofMat, 0.04);
+  g.add(chim);
+  // door + windows
+  g.add(box(0.95, 1.7, 0.12, -1.0, 0.85, 1.82, accentMat, 0.03));
+  g.add(box(0.85, 0.85, 0.1, 1.1, 1.9, 1.82, accentMat, 0.03));
+  g.add(box(0.85, 0.85, 0.1, 2.32, 1.9, 0, accentMat, 0.03));
+  g.userData.chimneyTop = new THREE.Vector3(1.4, 4.6, -0.6);
+  return g;
+}
+
+export function buildShed() {
+  const g = new THREE.Group();
+  g.add(box(2.4, 1.8, 2.0, 0, 0.9, 0));
+  const roof = box(2.7, 0.16, 2.3, 0, 1.95, 0, roofMat, 0.02);
+  roof.rotation.z = 0.12;
+  g.add(roof);
+  g.add(box(0.8, 1.2, 0.1, 0, 0.6, 1.02, accentMat, 0.02));
+  return g;
+}
+
+export function buildWell() {
+  const g = new THREE.Group();
+  const base = cyl(0.7, 0.78, 1.0, 16, woodMat);
+  base.position.y = 0.5;
+  g.add(base);
+  for (const s of [-1, 1]) {
+    const post = box(0.12, 1.3, 0.12, s * 0.55, 1.55, 0, roofMat, 0.03);
+    g.add(post);
+  }
+  const roof = new THREE.Mesh(new THREE.ConeGeometry(0.95, 0.6, 4), roofMat);
+  roof.rotation.y = Math.PI / 4;
+  roof.position.y = 2.5;
+  roof.castShadow = true;
+  g.add(roof);
+  const bucket = cyl(0.16, 0.13, 0.22, 10, accentMat);
+  bucket.position.y = 1.5;
+  g.add(bucket);
+  return g;
+}
+
+export function buildMailbox() {
+  const g = new THREE.Group();
+  g.add(box(0.12, 1.2, 0.12, 0, 0.6, 0, woodMat, 0.03));
+  const bx = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.42, 12, 1, false, 0, Math.PI), accentMat);
+  bx.rotation.z = Math.PI / 2;
+  bx.position.set(0, 1.25, 0);
+  g.add(bx);
+  g.add(box(0.42, 0.02, 0.36, 0, 1.04, 0, accentMat, 0.01));
+  return g;
+}
+
+export function buildFence(corners, h = 0.95) {
+  const g = new THREE.Group();
+  const postGeo = new THREE.BoxGeometry(0.1, h, 0.1);
+  for (let i = 0; i < corners.length; i++) {
+    const a = new THREE.Vector3(corners[i][0], 0, corners[i][1]);
+    const b = new THREE.Vector3(corners[(i + 1) % corners.length][0], 0, corners[(i + 1) % corners.length][1]);
+    const len = a.distanceTo(b);
+    const n = Math.max(1, Math.round(len / 1.2));
+    for (let k = 0; k <= n; k++) {
+      const p = a.clone().lerp(b, k / n);
+      const post = new THREE.Mesh(postGeo, woodMat);
+      post.position.set(p.x, h / 2, p.z);
+      post.castShadow = true;
+      g.add(post);
+    }
+    for (const ry of [0.32, 0.66]) {
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.08, len), woodMat);
+      const mid = a.clone().lerp(b, 0.5);
+      rail.position.set(mid.x, h * ry, mid.z);
+      rail.lookAt(b.x, h * ry, b.z);
+      g.add(rail);
+    }
+  }
+  return g;
+}
+
+export function buildPath(points) {
+  const g = new THREE.Group();
+  for (const [x, z] of points) {
+    const stone = box(0.7, 0.08, 0.55, x, 0.04, z, gravelMat, 0.12);
+    stone.rotation.y = (Math.random() - 0.5) * 0.3;
+    g.add(stone);
+  }
+  return g;
+}
+
+export function buildDrainField() {
+  const g = new THREE.Group();
+  // distribution box
+  g.add(box(1.0, 0.7, 1.0, 0, 0.35, 0, steelMat, 0.04));
+  for (let r = 0; r < 3; r++) {
+    const z = (r - 1) * 1.3;
+    const bed = box(5.5, 0.18, 0.9, 3.0, 0.09, z, gravelMat, 0.04);
+    g.add(bed);
+    const pipe = cyl(0.16, 0.16, 5.2, 12, steelMat);
+    pipe.rotation.z = Math.PI / 2;
+    pipe.position.set(3.0, 0.32, z);
+    g.add(pipe);
+  }
+  return g;
+}
+
+/* ---- the cutaway septic tank: the "magic" happens here ---- */
+function buildTankLiquid(w, h, d) {
+  const geo = new THREE.BoxGeometry(w, h, d);
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { uHealth: { value: 0 }, uTime: { value: 0 }, uHeight: { value: h } },
+    vertexShader: /* glsl */ `
+      uniform float uHeight;
+      varying float vY; varying vec3 vN;
+      void main() {
+        vY = (position.y + uHeight * 0.5) / uHeight;
+        vN = normalize(normalMatrix * normal);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform float uHealth; uniform float uTime;
+      varying float vY; varying vec3 vN;
+      void main() {
+        float sludgeTop = mix(0.42, 0.13, uHealth);
+        float scumBot = mix(0.74, 0.94, uHealth);
+        vec3 murky = vec3(0.34, 0.31, 0.25);
+        vec3 clear = vec3(0.40, 0.66, 0.52);
+        vec3 col = mix(murky, clear, uHealth);
+        if (vY < sludgeTop) {
+          col = mix(vec3(0.20, 0.17, 0.13), vec3(0.30, 0.34, 0.25), uHealth);
+        } else if (vY > scumBot) {
+          col = mix(vec3(0.31, 0.28, 0.21), vec3(0.50, 0.62, 0.50), uHealth);
+        } else {
+          float fleck = 0.5 + 0.5 * sin(vY * 42.0 + uTime * 2.0);
+          col += vec3(0.05, 0.34, 0.18) * uHealth * (0.45 + 0.25 * fleck);
+        }
+        float shade = 0.78 + 0.22 * clamp(dot(vN, normalize(vec3(0.4, 0.8, 0.5))), 0.0, 1.0);
+        gl_FragColor = vec4(col * shade, 1.0);
+      }
+    `,
+  });
+  const m = new THREE.Mesh(geo, mat);
+  m.userData.mat = mat;
+  return m;
+}
+
+function buildWaste(w, h, d, count = 64) {
+  const geo = new THREE.IcosahedronGeometry(0.16, 0);
+  const mat = new THREE.MeshStandardMaterial({ color: 0x6f655a, roughness: 1 });
+  const inst = new THREE.InstancedMesh(geo, mat, count);
+  const rand = rng(77);
+  const data = [];
+  const dummy = new THREE.Object3D();
+  for (let i = 0; i < count; i++) {
+    const x = (rand() - 0.5) * w * 0.88;
+    const y = -h / 2 + 0.2 + rand() * h * 0.62;
+    const z = (rand() - 0.5) * d * 0.7;
+    const s = 0.5 + rand() * 1.0;
+    data.push({ x, y, z, s, thresh: 0.15 + rand() * 0.7, sx: 0.7 + rand(), sy: 0.5 + rand() * 0.6, sz: 0.7 + rand() });
+    dummy.position.set(x, y, z);
+    dummy.scale.set(s, s, s);
+    dummy.updateMatrix();
+    inst.setMatrixAt(i, dummy.matrix);
+  }
+  inst.userData = { data, dummy, count };
+  return inst;
+}
+
+function buildBacteria(w, h, d, count = 240) {
+  const base = new THREE.PlaneGeometry(1, 1);
+  const geo = new THREE.InstancedBufferGeometry();
+  geo.index = base.index;
+  geo.attributes.position = base.attributes.position;
+  geo.attributes.uv = base.attributes.uv;
+  const off = new Float32Array(count * 3);
+  const ph = new Float32Array(count);
+  const th = new Float32Array(count);
+  const sz = new Float32Array(count);
+  const rand = rng(123);
+  for (let i = 0; i < count; i++) {
+    off[i * 3] = (rand() - 0.5) * w * 0.92;
+    off[i * 3 + 1] = -h / 2 + 0.2 + rand() * h * 0.86;
+    off[i * 3 + 2] = (rand() - 0.5) * d * 0.8;
+    ph[i] = rand() * 6.2831;
+    th[i] = rand() * 0.85;
+    sz[i] = 0.06 + rand() * 0.07;
+  }
+  geo.setAttribute('iOffset', new THREE.InstancedBufferAttribute(off, 3));
+  geo.setAttribute('iPhase', new THREE.InstancedBufferAttribute(ph, 1));
+  geo.setAttribute('iThresh', new THREE.InstancedBufferAttribute(th, 1));
+  geo.setAttribute('iSize', new THREE.InstancedBufferAttribute(sz, 1));
+  geo.instanceCount = count;
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { uHealth: { value: 0 }, uTime: { value: 0 }, uColor: { value: new THREE.Color(0.4, 1.6, 0.8) } },
+    vertexShader: /* glsl */ `
+      attribute vec3 iOffset; attribute float iPhase; attribute float iThresh; attribute float iSize;
+      uniform float uHealth; uniform float uTime;
+      varying float vB; varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        float born = smoothstep(iThresh, iThresh + 0.12, uHealth);
+        float tw = 0.7 + 0.3 * sin(uTime * 3.0 + iPhase);
+        vB = born * tw;
+        vec3 drift = vec3(sin(uTime * 0.8 + iPhase), sin(uTime * 0.6 + iPhase * 1.3), cos(uTime * 0.7 + iPhase)) * 0.12;
+        vec4 mv = modelViewMatrix * vec4(iOffset + drift, 1.0);
+        mv.xy += position.xy * iSize * (0.6 + born);
+        gl_Position = projectionMatrix * mv;
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform vec3 uColor; varying float vB; varying vec2 vUv;
+      void main() {
+        float r = length(vUv - 0.5) * 2.0;
+        float a = (1.0 - smoothstep(0.4, 1.0, r)) * vB;
+        if (a < 0.02) discard;
+        gl_FragColor = vec4(uColor * a, a);
+      }
+    `,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.frustumCulled = false;
+  mesh.userData.mat = mat;
+  return mesh;
+}
+
+export function buildSepticCutaway() {
+  const g = new THREE.Group();
+  const w = 5.2, h = 3.0, d = 3.4;
+  const wall = 0.16;
+  // shell: bottom, back, sides, top (front open for the cutaway view)
+  g.add(box(w, wall, d, 0, wall / 2, 0, steelMat, 0.03));
+  g.add(box(w, h, wall, 0, h / 2, -d / 2 + wall / 2, steelMat, 0.03));
+  g.add(box(wall, h, d, -w / 2 + wall / 2, h / 2, 0, steelMat, 0.03));
+  g.add(box(wall, h, d, w / 2 - wall / 2, h / 2, 0, steelMat, 0.03));
+  g.add(box(w, wall, d, 0, h - wall / 2, 0, steelMat, 0.03));
+  // front bottom lip so liquid doesn't look like it spills
+  g.add(box(w, 0.5, wall, 0, 0.25, d / 2 - wall / 2, steelMat, 0.03));
+
+  // manhole on top + lid
+  const collar = cyl(0.5, 0.5, 0.22, 18, steelMat);
+  collar.position.set(0, h + 0.11, 0);
+  g.add(collar);
+  const lid = cyl(0.56, 0.56, 0.1, 18, accentMat);
+  lid.position.set(0, h + 0.27, 0);
+  g.add(lid);
+  g.userData.lid = lid;
+
+  // inlet (from house) + outlet (to drain field) pipes
+  const inlet = cyl(0.22, 0.22, 1.6, 12, steelMat);
+  inlet.rotation.z = Math.PI / 2.3;
+  inlet.position.set(-w / 2 - 0.4, h - 0.6, 0);
+  g.add(inlet);
+  const outlet = cyl(0.2, 0.2, 1.4, 12, steelMat);
+  outlet.rotation.z = Math.PI / 2;
+  outlet.position.set(w / 2 + 0.6, h - 0.9, 0);
+  g.add(outlet);
+
+  // interior liquid (the cross-section)
+  const liquid = buildTankLiquid(w - 2 * wall - 0.04, h - 0.55, d - 2 * wall - 0.04);
+  liquid.position.set(0, (h - 0.55) / 2 + wall + 0.02, 0);
+  g.add(liquid);
+
+  const waste = buildWaste(w - 0.6, h - 0.7, d - 0.6, 64);
+  waste.position.copy(liquid.position);
+  g.add(waste);
+
+  const bacteria = buildBacteria(w - 0.5, h - 0.6, d - 0.5, 260);
+  bacteria.position.copy(liquid.position);
+  g.add(bacteria);
+
+  // falling powder dose + green burst (animated from the journey)
+  const dose = new THREE.Group();
+  const powder = cyl(0.16, 0.13, 0.4, 12, labelMat);
+  powder.position.y = 0;
+  dose.add(powder);
+  const burst = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: makeGlowTexture('rgba(225,255,235,1)', 'rgba(50,205,125,0)'),
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    color: new THREE.Color(0.5, 1.5, 0.85), opacity: 0,
+  }));
+  burst.scale.setScalar(2.2);
+  dose.add(burst);
+  dose.position.set(0, h + 1.6, 0);
+  dose.userData = { powder, burst };
+  g.add(dose);
+
+  g.userData = {
+    liquid: liquid.userData.mat,
+    waste,
+    bacteria: bacteria.userData.mat,
+    dose,
+    inletWorld: new THREE.Vector3(-w / 2 - 1.0, h - 0.4, 0),
+    manholeWorld: new THREE.Vector3(0, h + 0.3, 0),
+    size: { w, h, d },
+  };
+  return g;
+}
+
 /* re-export for convenience */
 export { whiteMat };
