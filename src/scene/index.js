@@ -51,6 +51,7 @@ export class App {
     this.par = { x: 0, y: 0 };
     this.pulse = { x: 0, y: 0 };
     this.activeStep = 0;
+    this.isMobile = window.matchMedia('(max-width: 820px), (pointer: coarse)').matches;
 
     this.fills = [];       // culture-fill shader materials (uTime)
     this.motors = [];      // { m, speed }
@@ -70,7 +71,7 @@ export class App {
 
   initRenderer() {
     this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.isMobile ? 1.3 : 1.75));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.NoToneMapping;
@@ -89,7 +90,7 @@ export class App {
     dir.position.set(48, 60, 34);
     dir.target.position.set(70, 0, 0);
     dir.castShadow = true;
-    dir.shadow.mapSize.set(2048, 2048);
+    dir.shadow.mapSize.set(this.isMobile ? 1024 : 2048, this.isMobile ? 1024 : 2048);
     Object.assign(dir.shadow.camera, { left: -100, right: 100, top: 60, bottom: -60, near: 10, far: 200 });
     dir.shadow.bias = -0.0004;
     dir.shadow.radius = 5;
@@ -212,7 +213,7 @@ export class App {
 
     this.jar = buildJar(2.3, true);
     this.jar.position.set(131, 0, -0.5);
-    this.jar.rotation.y = 1.1; // turn the label toward the approaching camera
+    this.jar.rotation.y = 1.24; // turn the label to face the product-stage camera
     S.add(this.jar);
 
     this.smallJars = [];
@@ -507,8 +508,10 @@ export class App {
     this.pulse.x *= 0.9;
     this.pulse.y *= 0.9;
     const cam = this.camera;
-    cam.position.copy(this.camPos);
-    _dir.copy(this.camTgt).sub(this.camPos).normalize();
+    // narrow/portrait screens dolly the camera back so nothing gets cropped
+    const zoom = cam.aspect < 1.25 ? 1 + (1.25 - cam.aspect) * 0.95 : 1;
+    cam.position.copy(this.camPos).sub(this.camTgt).multiplyScalar(zoom).add(this.camTgt);
+    _dir.copy(this.camTgt).sub(cam.position).normalize();
     _right.crossVectors(_dir, _UP).normalize();
     _up.crossVectors(_right, _dir).normalize();
     const px = this.par.x + this.pulse.x, py = this.par.y + this.pulse.y;

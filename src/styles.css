@@ -232,3 +232,26 @@ a { color: inherit; text-decoration: none; }
   .footer-nav { grid-template-columns: 1fr; }
   .footer-nav-btn + .footer-nav-btn { border-left: none; border-top: 1px solid rgba(252, 252, 252, 0.16); }
 }
+
+@media (max-width: 640px) {
+  .header { padding: 0 14px; }
+  .header__nav-left { display: none; }
+  .pill-btn { height: 30px; padding: 0 12px; font-size: 11px; }
+  .brand__name { font-size: 17px; }
+  .hero__content { margin-top: calc(17vh + var(--header-h)); padding: 0 18px; }
+  .hero__subtitle { font-size: 12.5px; }
+  .hero__scroll-btn { font-size: 9px; }
+  .flow__pin { padding: 0 0 26px 18px; }
+  .flow__steps { width: calc(100vw - 36px); }
+  .flow__title { font-size: 13.5px; }
+  .flow__description { font-size: 12px; }
+  .features, .standards, .faq { padding: 80px 6vw 90px; }
+  .features__title { margin-bottom: 48px; }
+  .features__grid { grid-template-columns: 1fr; }
+  .feature-item { border-left: none !important; padding: 28px 0 6px; border-top: 1px solid var(--hairline); }
+  .feature-item__icon { width: 60px; height: 60px; margin-bottom: 26px; }
+  .standards__container { gap: 30px; }
+  .cta-section { padding: 90px 6vw 80px; }
+  .footer__meta { flex-direction: column; gap: 10px; text-align: center; padding: 0 16px; }
+  .footer__meta div { justify-content: center; flex-wrap: wrap; }
+}

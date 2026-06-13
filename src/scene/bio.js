@@ -593,88 +593,241 @@ export function buildSacks(n = 4) {
 
 /* ============================================================ ZONE 6 — product */
 function makeJarLabel() {
+  const W = 2048, H = 940;
   const c = document.createElement('canvas');
-  c.width = 1024;
-  c.height = 512;
+  c.width = W; c.height = H;
   const ctx = c.getContext('2d');
-  ctx.fillStyle = '#f4f6fa';
-  ctx.fillRect(0, 0, 1024, 512);
+  const BLUE = '#3f5cb6', NAVY = '#26356b', LAB = '#3a6fc6', GRAY = '#586280', LEAF = '#57b85a';
+  ctx.fillStyle = '#f5f7fb';
+  ctx.fillRect(0, 0, W, H);
+
   // hex watermark
-  ctx.strokeStyle = 'rgba(60,90,170,0.06)';
+  ctx.strokeStyle = 'rgba(74,98,176,0.05)';
   ctx.lineWidth = 3;
-  const hr = 34;
-  for (let y = -hr; y < 512 + hr; y += hr * 1.5)
-    for (let x = -hr, row = 0; x < 1024 + hr; x += hr * 1.73, row++) {
-      const ox = (Math.round(y / (hr * 1.5)) % 2) * hr * 0.87;
+  const hr = 42;
+  for (let y = -hr; y < H + hr; y += hr * 1.5)
+    for (let x = -hr; x < W + hr; x += hr * 1.732) {
+      const ox = (Math.round(y / (hr * 1.5)) % 2) * hr * 0.866;
       ctx.beginPath();
       for (let k = 0; k < 6; k++) {
         const a = (Math.PI / 3) * k + Math.PI / 6;
-        const px = x + ox + Math.cos(a) * hr;
-        const py = y + Math.sin(a) * hr;
+        const px = x + ox + Math.cos(a) * hr, py = y + Math.sin(a) * hr;
         k ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
       }
       ctx.closePath();
       ctx.stroke();
     }
-  // front panel is centered (faces +Z when seam at back)
-  const cx = 512;
-  // SYNTEBIO
-  ctx.textAlign = 'center';
-  ctx.fillStyle = '#7c8596';
-  ctx.font = '700 38px Inter, Arial';
-  ctx.fillText('SYNTE', cx - 38, 150);
-  ctx.fillStyle = '#2f6fb0';
-  ctx.fillText('BIO', cx + 70, 150);
-  ctx.fillStyle = '#43b95f';
-  ctx.beginPath();
-  ctx.ellipse(cx + 140, 138, 12, 18, -0.5, 0, Math.PI * 2);
-  ctx.fill();
-  // SeptiLab wordmark
-  ctx.font = '800 120px Inter, Arial';
-  ctx.fillStyle = '#26356b';
-  ctx.fillText('Septi', cx - 95, 285);
-  ctx.fillStyle = '#3a6fc6';
-  ctx.fillText('Lab', cx + 185, 285);
-  // tagline
-  ctx.font = '600 30px Inter, Arial';
-  ctx.fillStyle = '#3a4a72';
-  ctx.fillText('EKSPLOATACJA SZAMB I OCZYSZCZALNI', cx, 345);
-  // 1 KG badge
-  ctx.fillStyle = '#26356b';
-  ctx.font = '800 44px Inter, Arial';
-  ctx.fillText('1 KG', cx, 420);
+
+  const cx = W / 2;
+  let s = 7;
+  const rnd = () => (((s = (s * 16807 + 19) % 2147483647) & 0xffff) / 0xffff);
+
+  /* ---- icons (blue line art) ---- */
+  const bacteria = (x, y, sz) => {
+    ctx.fillStyle = BLUE;
+    for (let i = 0; i < 18; i++) {
+      const a = rnd() * 6.28, rr = rnd() * sz * 0.52;
+      const px = x + Math.cos(a) * rr, py = y + Math.sin(a) * rr;
+      const len = sz * 0.15 + rnd() * sz * 0.1, w = sz * 0.07;
+      ctx.save(); ctx.translate(px, py); ctx.rotate(rnd() * 6.28);
+      ctx.beginPath(); ctx.roundRect(-len / 2, -w / 2, len, w, w / 2); ctx.fill(); ctx.restore();
+    }
+  };
+  const tank = (x, y, sz) => {
+    ctx.strokeStyle = BLUE; ctx.lineWidth = sz * 0.05; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    const w = sz * 1.0, h = sz * 0.52;
+    ctx.beginPath(); ctx.roundRect(x - w / 2, y - h / 2, w, h, h * 0.5); ctx.stroke();
+    ctx.beginPath(); ctx.roundRect(x - sz * 0.11, y - h / 2 - sz * 0.17, sz * 0.22, sz * 0.2, 4); ctx.stroke();
+    for (const bx of [-w * 0.3, w * 0.3]) { ctx.beginPath(); ctx.moveTo(x + bx, y - h / 2 + 6); ctx.lineTo(x + bx, y + h / 2 - 6); ctx.stroke(); }
+  };
+  const leaves = (x, y, sz) => {
+    const leaf = (dx, rot, fill) => {
+      ctx.save(); ctx.translate(x + dx, y); ctx.rotate(rot);
+      ctx.fillStyle = BLUE; ctx.strokeStyle = BLUE; ctx.lineWidth = sz * 0.045; ctx.lineJoin = 'round';
+      ctx.beginPath(); ctx.moveTo(0, sz * 0.42);
+      ctx.quadraticCurveTo(sz * 0.36, sz * 0.05, 0, -sz * 0.46);
+      ctx.quadraticCurveTo(-sz * 0.36, sz * 0.05, 0, sz * 0.42);
+      fill ? ctx.fill() : ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, sz * 0.36); ctx.lineTo(0, -sz * 0.4);
+      ctx.lineWidth = sz * 0.03; ctx.strokeStyle = fill ? '#f5f7fb' : BLUE; ctx.stroke();
+      ctx.restore();
+    };
+    leaf(-sz * 0.14, -0.32, true); leaf(sz * 0.16, 0.36, false);
+  };
+  const enzyme = (x, y, sz) => {
+    ctx.strokeStyle = BLUE; ctx.lineWidth = sz * 0.05; ctx.lineJoin = 'round';
+    const R = sz * 0.26;
+    const hex = (hx, hy) => {
+      ctx.beginPath();
+      for (let k = 0; k < 6; k++) { const a = (Math.PI / 3) * k + Math.PI / 6; const px = hx + Math.cos(a) * R, py = hy + Math.sin(a) * R; k ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }
+      ctx.closePath(); ctx.stroke();
+    };
+    hex(x - R * 0.85, y - R * 0.45); hex(x + R * 0.85, y - R * 0.45); hex(x, y + R * 0.72);
+    ctx.fillStyle = BLUE;
+    for (const [nx, ny] of [[x - R * 1.7, y - R * 0.45], [x + R * 1.7, y - R * 0.45], [x, y + R * 1.75]]) { ctx.beginPath(); ctx.arc(nx, ny, sz * 0.05, 0, 6.28); ctx.fill(); }
+  };
+  const drop = (x, y, sz) => {
+    ctx.fillStyle = '#2a3f8f';
+    ctx.beginPath(); ctx.moveTo(x, y - sz * 0.52);
+    ctx.bezierCurveTo(x + sz * 0.44, y - sz * 0.04, x + sz * 0.36, y + sz * 0.46, x, y + sz * 0.46);
+    ctx.bezierCurveTo(x - sz * 0.36, y + sz * 0.46, x - sz * 0.44, y - sz * 0.04, x, y - sz * 0.52);
+    ctx.fill();
+  };
+  const nose = (x, y, sz) => {
+    ctx.strokeStyle = BLUE; ctx.lineWidth = sz * 0.05; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(x - sz * 0.12, y - sz * 0.42);
+    ctx.quadraticCurveTo(x - sz * 0.2, y + sz * 0.12, x - sz * 0.06, y + sz * 0.32);
+    ctx.quadraticCurveTo(x + sz * 0.06, y + sz * 0.44, x + sz * 0.2, y + sz * 0.32);
+    ctx.stroke();
+    ctx.beginPath(); ctx.arc(x + sz * 0.04, y + sz * 0.3, sz * 0.055, 0, 6.28); ctx.stroke();
+    for (let i = 0; i < 3; i++) {
+      const wy = y - sz * 0.18 + i * sz * 0.24;
+      ctx.beginPath(); ctx.moveTo(x + sz * 0.34, wy);
+      ctx.quadraticCurveTo(x + sz * 0.5, wy - sz * 0.09, x + sz * 0.66, wy);
+      ctx.quadraticCurveTo(x + sz * 0.82, wy + sz * 0.09, x + sz * 0.98, wy);
+      ctx.stroke();
+    }
+  };
+  const caption = (lines, x, y) => {
+    ctx.fillStyle = NAVY; ctx.font = '700 27px Inter, Arial'; ctx.textAlign = 'center';
+    lines.forEach((ln, i) => ctx.fillText(ln, x, y + i * 33));
+  };
+
+  /* ---- SYNTEBIO logo (above the wordmark, shifted right like the photo) ---- */
+  ctx.textAlign = 'left';
+  ctx.font = '800 50px Inter, Arial';
+  const synW = ctx.measureText('SYNTE').width, bioW = ctx.measureText('BIO').width;
+  const lx = cx + 90 - (synW + bioW + 46) / 2;
+  ctx.fillStyle = GRAY; ctx.fillText('SYNTE', lx, 150);
+  ctx.fillStyle = '#2f6fb0'; ctx.fillText('BIO', lx + synW, 150);
+  ctx.fillStyle = LEAF;
+  ctx.save(); ctx.translate(lx + synW + bioW + 28, 132); ctx.rotate(-0.4);
+  ctx.beginPath(); ctx.moveTo(0, 18); ctx.quadraticCurveTo(20, -2, 0, -22); ctx.quadraticCurveTo(-12, -2, 0, 18); ctx.fill(); ctx.restore();
+
+  /* ---- SeptiLab wordmark ---- */
+  ctx.font = '800 172px Inter, Arial';
+  const sepW = ctx.measureText('Septi').width, labW = ctx.measureText('Lab').width;
+  const sx = cx - (sepW + labW) / 2;
+  ctx.fillStyle = NAVY; ctx.fillText('Septi', sx, 330);
+  ctx.fillStyle = LAB; ctx.fillText('Lab', sx + sepW, 330);
+
+  /* ---- tagline ---- */
+  ctx.textAlign = 'center'; ctx.font = '700 31px Inter, Arial'; ctx.fillStyle = GRAY;
+  if ('letterSpacing' in ctx) ctx.letterSpacing = '2px';
+  ctx.fillText('EKSPLOATACJA SZAMB I PRZYDOMOWYCH OCZYSZCZALNI', cx, 405);
+  if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+
+  /* ---- 2 x 3 icon grid with captions ---- */
+  const col = [cx - 300, cx, cx + 300];
+  bacteria(col[0], 535, 95); caption(['Do 100 miliardów', 'aktywnych', 'bakterii w dawce'], col[0], 625);
+  tank(col[1], 535, 95); caption(['Do wszystkich', 'typów szamb', 'i oczyszczalni'], col[1], 625);
+  leaves(col[2], 535, 95); caption(['Produkt', 'bezpieczny dla', 'środowiska'], col[2], 625);
+  enzyme(col[0], 770, 95); caption(['Kompleks 4', 'enzymów'], col[0], 855);
+  drop(col[1], 770, 95); caption(['Redukcja osadów', 'i zanieczyszczeń'], col[1], 855);
+  nose(col[2], 770, 95); caption(['Likwidacja', 'nieprzyjemnych', 'zapachów'], col[2], 855);
+
+  /* ---- right-side info panel (wraps toward the side) ---- */
+  ctx.fillStyle = '#ffffff';
+  ctx.strokeStyle = 'rgba(40,53,107,0.4)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.roundRect(1715, 250, 270, 470, 8); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = GRAY; ctx.font = '700 18px Inter, Arial'; ctx.textAlign = 'left';
+  const rows = [['Producent', 305], ['Sposób użycia', 430], ['Przechowywanie', 560], ['Data ważności', 660]];
+  for (const [t, ry] of rows) {
+    ctx.fillText(t, 1735, ry);
+    ctx.strokeStyle = 'rgba(40,53,107,0.18)';
+    ctx.beginPath(); ctx.moveTo(1735, ry + 16); ctx.lineTo(1965, ry + 16); ctx.stroke();
+    ctx.fillStyle = 'rgba(88,98,128,0.5)';
+    for (let i = 0; i < 2; i++) { ctx.fillRect(1735, ry + 30 + i * 14, 210 - i * 40, 5); }
+    ctx.fillStyle = GRAY;
+  }
+
+  /* ---- faint wrapped fragments on the left edge ---- */
+  ctx.fillStyle = 'rgba(88,98,128,0.35)';
+  for (let i = 0; i < 6; i++) ctx.fillRect(70, 430 + i * 26, 150 - (i % 2) * 40, 6);
+
   const tex = new THREE.CanvasTexture(c);
   tex.anisotropy = 8;
   return tex;
 }
 
+/* a knurled (vertically fluted) cylinder for the screw cap */
+function fluteCylinder(r, h, mat, flutes = 46, amp = 0.016) {
+  const geo = new THREE.CylinderGeometry(r, r, h, flutes * 2, 1, false);
+  const p = geo.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), z = p.getZ(i);
+    const rr = Math.hypot(x, z);
+    if (rr > 1e-3) {
+      const ang = Math.atan2(z, x);
+      const k = 1 + amp * (0.5 + 0.5 * Math.cos(ang * flutes));
+      p.setX(i, (x / rr) * r * k);
+      p.setZ(i, (z / rr) * r * k);
+    }
+  }
+  geo.computeVertexNormals();
+  const m = new THREE.Mesh(geo, mat);
+  m.castShadow = true;
+  return m;
+}
+
 export function buildJar(scale = 1, withLabel = true) {
   const g = new THREE.Group();
-  const r = 0.95 * scale;
-  const h = 2.1 * scale;
+  const r = 0.9 * scale;
+  const h = 2.6 * scale;
+  const seg = withLabel ? 48 : 22;
+  const lidMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.42 });
+  const seamMat = new THREE.MeshStandardMaterial({ color: 0xd6dde7, roughness: 0.6 });
+
+  // body (label printed directly on it)
   const bodyMat = withLabel
-    ? new THREE.MeshStandardMaterial({ map: makeJarLabel(), roughness: 0.6, metalness: 0 })
+    ? new THREE.MeshStandardMaterial({ map: makeJarLabel(), roughness: 0.55, metalness: 0 })
     : labelMat;
-  const body = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 40), bodyMat);
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 0.985, h, seg), bodyMat);
   body.position.y = h / 2;
   body.castShadow = true;
   body.receiveShadow = true;
   g.add(body);
-  // rounded shoulder, tucked just under the lid
-  const shoulder = new THREE.Mesh(new THREE.SphereGeometry(r, 40, 10, 0, Math.PI * 2, 0, Math.PI / 2.4), labelMat);
-  shoulder.scale.y = 0.32;
-  shoulder.position.y = h - 0.05 * scale;
+
+  // rounded shoulder
+  const shoulder = new THREE.Mesh(new THREE.SphereGeometry(r, seg, 12, 0, Math.PI * 2, 0, Math.PI / 2.6), labelMat);
+  shoulder.scale.y = 0.4;
+  shoulder.position.y = h - 0.02 * scale;
   g.add(shoulder);
-  // lid, seated flush on the body top with a slight overhang
-  const lidH = 0.42 * scale;
-  const lid = cyl(r * 1.07, r * 1.07, lidH, 40, new THREE.MeshStandardMaterial({ color: 0xf7f9fc, roughness: 0.5 }));
-  lid.position.y = h + lidH / 2 - 0.04 * scale;
-  lid.castShadow = true;
-  g.add(lid);
-  // base rim
-  const rim = cyl(r * 1.01, r * 1.01, 0.1 * scale, 40, labelMat);
-  rim.position.y = 0.05 * scale;
+
+  // base foot
+  const rim = cyl(r * 1.0, r * 0.95, 0.13 * scale, seg, labelMat);
+  rim.position.y = 0.065 * scale;
   g.add(rim);
+
+  // lid
+  const lidR = r * 1.04, lidH = 0.52 * scale, lidBottom = h + 0.04 * scale;
+  if (withLabel) {
+    const lidSide = fluteCylinder(lidR, lidH, lidMat);
+    lidSide.position.y = lidBottom + lidH / 2;
+    g.add(lidSide);
+    const dome = new THREE.Mesh(new THREE.SphereGeometry(lidR, seg, 12, 0, Math.PI * 2, 0, Math.PI / 2.2), lidMat);
+    dome.scale.y = 0.22;
+    dome.position.y = lidBottom + lidH;
+    g.add(dome);
+    const edge = new THREE.Mesh(new THREE.TorusGeometry(lidR * 0.92, lidR * 0.08, 10, seg), lidMat);
+    edge.rotation.x = Math.PI / 2;
+    edge.position.y = lidBottom + lidH - 0.015 * scale;
+    g.add(edge);
+    const seam = cyl(lidR * 1.006, lidR * 1.006, 0.045 * scale, seg, seamMat);
+    seam.position.y = lidBottom + 0.012 * scale;
+    g.add(seam);
+  } else {
+    const lid = cyl(lidR, lidR, lidH, seg, lidMat);
+    lid.position.y = lidBottom + lidH / 2;
+    lid.castShadow = true;
+    g.add(lid);
+    const dome = new THREE.Mesh(new THREE.SphereGeometry(lidR, seg, 8, 0, Math.PI * 2, 0, Math.PI / 2.2), lidMat);
+    dome.scale.y = 0.2;
+    dome.position.y = lidBottom + lidH;
+    g.add(dome);
+  }
+
   // halo for finale reveal
   const halo = new THREE.Sprite(
     new THREE.SpriteMaterial({
@@ -686,8 +839,8 @@ export function buildJar(scale = 1, withLabel = true) {
       opacity: 0,
     })
   );
-  halo.scale.setScalar(5 * scale);
-  halo.position.y = h * 0.55;
+  halo.scale.setScalar(5.5 * scale);
+  halo.position.y = h * 0.5;
   g.add(halo);
   g.userData = { body, halo, h, r };
   return g;
