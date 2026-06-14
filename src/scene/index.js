@@ -38,6 +38,7 @@ const _UP = new THREE.Vector3(0, 1, 0);
 const _dir = new THREE.Vector3();
 const _right = new THREE.Vector3();
 const _up = new THREE.Vector3();
+const _tmpTgt = new THREE.Vector3();
 const smoothstep = (a, b, x) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
   return t * t * (3 - 2 * t);
@@ -50,6 +51,7 @@ export class App {
     this.mouse = { x: 0, y: 0 };
     this.par = { x: 0, y: 0 };
     this.pulse = { x: 0, y: 0 };
+    this.panAmt = 0;
     this.activeStep = 0;
     this.isMobile = window.matchMedia('(max-width: 820px), (pointer: coarse)').matches;
 
@@ -516,7 +518,14 @@ export class App {
     _up.crossVectors(_right, _dir).normalize();
     const px = this.par.x + this.pulse.x, py = this.par.y + this.pulse.y;
     cam.position.addScaledVector(_right, px * 0.6).addScaledVector(_up, -py * 0.6);
-    cam.lookAt(this.camTgt);
+    // keep the scene clear of the left-hand step panel: gently pan the framing right
+    // (move camera + target left along screen-right) during the steps, desktop only
+    const wantPan = (!this.isMobile && this.activeStep >= 1) ? 1 : 0;
+    this.panAmt += (wantPan - this.panAmt) * Math.min(1, dt * 3);
+    const pan = cam.position.distanceTo(this.camTgt) * 0.16 * this.panAmt;
+    cam.position.addScaledVector(_right, -pan);
+    _tmpTgt.copy(this.camTgt).addScaledVector(_right, -pan);
+    cam.lookAt(_tmpTgt);
 
     for (const f of this.fills) f.uniforms.uTime.value = t;
     for (const { m, speed } of this.motors) m.rotation.y = t * speed;

@@ -44,6 +44,31 @@ One-time setup in the repository:
 The site is served at `https://<user>.github.io/<repo>/`. `vite.config.js` uses
 `base: './'`, so assets resolve correctly under that sub-path without extra config.
 
+## Płatności (order buttons)
+
+The "Zamów" buttons (`[data-checkout]`) are wired in `src/checkout.js`. Until you
+configure a payment method they degrade gracefully (scroll to the order section +
+a toast). Pick one of two paths in `src/config.js`:
+
+**A) Payment link — zero backend, works anywhere (incl. GitHub Pages)**
+Paste a hosted checkout URL into `PAYMENT_LINK` (Stripe Payment Link, Przelewy24,
+PayU, Tpay…). The buttons redirect straight to it. Done.
+
+**B) Stripe Checkout on Vercel — BLIK / Przelewy24 / card**
+Leave `PAYMENT_LINK` empty and deploy to **Vercel** (free, auto-builds this Vite
+project; `api/checkout.js` becomes a serverless function automatically):
+
+1. Import the repo at [vercel.com/new](https://vercel.com/new) (framework: Vite — auto-detected).
+2. **Settings → Environment Variables**:
+   - `STRIPE_SECRET_KEY` — your Stripe secret key (`sk_live_…` / `sk_test_…`)
+   - `PRICE_GROSZE` *(optional)* — price in grosze, default `9900` (= 99,00 zł)
+3. Deploy. Clicking "Zamów" calls `POST /api/checkout`, which creates a Stripe
+   Checkout Session (PLN, BLIK + P24 + card, PL shipping) and redirects to it.
+   On return the site shows a success/cancel toast (`?zamowienie=sukces|anulowano`).
+
+Never put the secret key in the frontend — it lives only in the Vercel env / the
+serverless function. GitHub Pages can't run `/api/*`, so use path **A** there.
+
 ## Stack
 
 - [three.js](https://threejs.org/) — WebGL scene, procedural low-poly geometry, UnrealBloom

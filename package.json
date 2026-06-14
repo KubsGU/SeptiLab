@@ -1,7 +1,7 @@
 {
   "name": "septilab",
   "version": "1.0.0",
-  "description": "Recreation of the vectrfl.com scroll-driven WebGL experience (three.js + GSAP)",
+  "description": "SeptiLab — scroll-driven WebGL product site (three.js + GSAP) with Stripe Checkout",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -15,6 +15,7 @@
   "license": "ISC",
   "dependencies": {
     "gsap": "^3.15.0",
+    "stripe": "^17.7.0",
     "three": "^0.184.0"
   },
   "devDependencies": {

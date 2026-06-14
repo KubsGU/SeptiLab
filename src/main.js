@@ -2,6 +2,7 @@ import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { ScrollToPlugin } from 'gsap/ScrollToPlugin';
 import { App } from './scene/index.js';
+import { initCheckout } from './checkout.js';
 
 gsap.registerPlugin(ScrollTrigger, ScrollToPlugin);
 
@@ -12,9 +13,22 @@ const STEP_RANGES = [
 document.body.classList.add('is-locked');
 window.scrollTo(0, 0);
 
-/* ---------------------------------------------------- scene */
-const app = new App(document.getElementById('webgl'));
-const heroPos = app.camPos.clone();
+/* keep a stable viewport height for the scroll-pinned canvas (fixes mobile 100vh) */
+const setAppHeight = () => document.documentElement.style.setProperty('--app-height', `${window.innerHeight}px`);
+setAppHeight();
+let _rt;
+window.addEventListener('resize', () => { setAppHeight(); clearTimeout(_rt); _rt = setTimeout(() => ScrollTrigger.refresh(), 200); });
+window.addEventListener('orientationchange', () => setTimeout(() => { setAppHeight(); ScrollTrigger.refresh(); }, 300));
+
+/* ---------------------------------------------------- scene (non-fatal: never trap the page) */
+let app = null;
+try {
+  app = new App(document.getElementById('webgl'));
+} catch (e) {
+  console.error('[scene] WebGL init failed — showing the page without 3D', e);
+  document.documentElement.classList.add('no-webgl');
+}
+const heroPos = app ? app.camPos.clone() : null;
 
 /* ---------------------------------------------------- step panel */
 const steps = [...document.querySelectorAll('.flow__step')];
@@ -39,12 +53,28 @@ function setStep(active) {
       gsap.fromTo(el.querySelector('.flow__number'), { scale: 0.55 }, { scale: 1, duration: 0.6, ease: 'back.out(2.6)' });
       gsap.fromTo(el.querySelector('.flow__title'), { x: -12, opacity: 0.3 }, { x: 0, opacity: 1, duration: 0.5, ease: 'power3.out' });
     }
-    app.stepPulse();
+    if (app) app.stepPulse();
   }
   prevActive = active;
 }
 
-app.buildJourney(setStep);
+let _fbActive = 0;
+if (app) {
+  app.buildJourney(setStep);
+} else {
+  // no WebGL: still drive the step panel on scroll so the process stays readable
+  ScrollTrigger.create({
+    trigger: '.top', start: 'top top', end: 'bottom bottom',
+    onUpdate: (st) => {
+      let step = 0;
+      for (let i = 0; i < STEP_RANGES.length; i++) if (st.progress >= STEP_RANGES[i][0]) step = i + 1;
+      if (step !== _fbActive) { _fbActive = step; setStep(step); }
+    },
+  });
+}
+
+/* order buttons → payment (Stripe Checkout / payment link), see src/config.js */
+initCheckout();
 
 /* steps are hoverable (cursor reacts) + clickable to jump to that stage */
 steps.forEach((el) => {
@@ -174,34 +204,31 @@ function intro() {
       document.body.classList.remove('is-locked');
       ScrollTrigger.refresh();
     }, 0.7)
-    .to('#webgl', { opacity: 1, duration: 1.2, ease: 'power2.out' }, 0.45)
-    .fromTo(app.camPos,
-      {
-        x: heroPos.x - 9,
-        y: heroPos.y + 11,
-        z: heroPos.z + 16,
-      },
-      { x: heroPos.x, y: heroPos.y, z: heroPos.z, duration: 2.2, ease: 'power3.out' }, 0.4)
-    .to(heroBits, {
-      opacity: 1,
-      rotateY: 0,
-      rotateX: 0,
-      x: 0,
-      y: 0,
-      duration: 1.5,
-      stagger: 0.09,
-      ease: 'expo.out',
-    }, 0.75)
+    .to('#webgl', { opacity: 1, duration: 1.2, ease: 'power2.out' }, 0.45);
+  if (app && heroPos) {
+    tl.fromTo(app.camPos,
+      { x: heroPos.x - 9, y: heroPos.y + 11, z: heroPos.z + 16 },
+      { x: heroPos.x, y: heroPos.y, z: heroPos.z, duration: 2.2, ease: 'power3.out' }, 0.4);
+  }
+  tl.to(heroBits, { opacity: 1, rotateY: 0, rotateX: 0, x: 0, y: 0, duration: 1.5, stagger: 0.09, ease: 'expo.out' }, 0.75)
     .to('.header', { opacity: 1, y: 0, duration: 0.8, ease: 'power2.out' }, 1.0)
     .to('.hsbtn-in', { yPercent: 0, duration: 0.8, ease: 'power3.out' }, 1.25)
     .add(scrollHintLoop, 1.6);
   return tl;
 }
 
+let introStarted = false;
+function startIntro() {
+  if (introStarted) return;
+  introStarted = true;
+  intro();
+}
 Promise.all([
   document.fonts?.ready ?? Promise.resolve(),
   new Promise((res) => loaderTl.eventCallback('onComplete', res)),
-]).then(intro);
+]).then(startIntro);
+// safety net: never let a hung font load or animation trap the page behind the loader
+setTimeout(startIntro, 3500);
 
 /* ---------------------------------------------------- custom cursor + magnetic buttons */
 if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
