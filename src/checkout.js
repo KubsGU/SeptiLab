@@ -3,6 +3,8 @@ import { PAYMENT_LINK, CHECKOUT_ENDPOINT } from './config.js';
 function toast(msg, kind = 'ok') {
   const t = document.createElement('div');
   t.className = `toast toast--${kind}`;
+  t.setAttribute('role', 'status');
+  t.setAttribute('aria-live', 'polite');
   t.textContent = msg;
   document.body.appendChild(t);
   requestAnimationFrame(() => t.classList.add('is-in'));

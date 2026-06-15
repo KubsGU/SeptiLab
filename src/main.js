@@ -10,6 +10,8 @@ const STEP_RANGES = [
   [0.10, 0.24], [0.24, 0.37], [0.37, 0.50], [0.50, 0.62], [0.62, 0.73], [0.73, 0.84], [0.84, 1.0],
 ];
 
+const REDUCE = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
 document.body.classList.add('is-locked');
 window.scrollTo(0, 0);
 
@@ -79,15 +81,23 @@ initCheckout();
 /* steps are hoverable (cursor reacts) + clickable to jump to that stage */
 steps.forEach((el) => {
   const header = el.querySelector('.flow__header');
-  header.addEventListener('pointerenter', () => el.classList.add('is-hover'));
-  header.addEventListener('pointerleave', () => el.classList.remove('is-hover'));
-  header.addEventListener('click', () => {
+  const title = el.querySelector('.flow__title')?.textContent || '';
+  header.setAttribute('role', 'button');
+  header.setAttribute('tabindex', '0');
+  header.setAttribute('aria-label', `Przejdź do kroku ${el.dataset.step}: ${title}`);
+  const jump = () => {
     const n = +el.dataset.step;
     const top = document.querySelector('.top');
     const [a, b] = STEP_RANGES[n - 1];
     const mid = (a + b) / 2;
     const targetY = top.offsetTop + (top.offsetHeight - window.innerHeight) * mid;
-    gsap.to(window, { scrollTo: targetY, duration: 1.0, ease: 'power2.inOut' });
+    gsap.to(window, { scrollTo: targetY, duration: REDUCE ? 0 : 1.0, ease: 'power2.inOut' });
+  };
+  header.addEventListener('pointerenter', () => el.classList.add('is-hover'));
+  header.addEventListener('pointerleave', () => el.classList.remove('is-hover'));
+  header.addEventListener('click', jump);
+  header.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); jump(); }
   });
 });
 
@@ -217,11 +227,23 @@ function intro() {
   return tl;
 }
 
+function reducedReveal() {
+  // honour prefers-reduced-motion: reveal everything at once, no cinematic intro
+  gsap.set('#loader', { display: 'none' });
+  gsap.set('#webgl', { opacity: 1 });
+  gsap.set(heroBits, { opacity: 1, rotateY: 0, rotateX: 0, x: 0, y: 0 });
+  gsap.set('.header', { opacity: 1, y: 0 });
+  gsap.set('.hsbtn-in', { yPercent: 0 });
+  document.body.classList.remove('is-locked');
+  ScrollTrigger.refresh();
+}
+
 let introStarted = false;
 function startIntro() {
   if (introStarted) return;
   introStarted = true;
-  intro();
+  if (REDUCE) reducedReveal();
+  else intro();
 }
 Promise.all([
   document.fonts?.ready ?? Promise.resolve(),

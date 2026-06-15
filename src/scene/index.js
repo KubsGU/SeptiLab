@@ -54,6 +54,7 @@ export class App {
     this.panAmt = 0;
     this.activeStep = 0;
     this.isMobile = window.matchMedia('(max-width: 820px), (pointer: coarse)').matches;
+    this.reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     this.fills = [];       // culture-fill shader materials (uTime)
     this.motors = [];      // { m, speed }
@@ -494,6 +495,7 @@ export class App {
 
   // a brief parallax kick (like a mouse hover) when a step is stepped over
   stepPulse() {
+    if (this.reduce) return;
     this._pulseDir = -(this._pulseDir || 1);
     this.pulse.x = 0.8 * this._pulseDir;
     this.pulse.y = -0.45;
@@ -516,7 +518,8 @@ export class App {
     _dir.copy(this.camTgt).sub(cam.position).normalize();
     _right.crossVectors(_dir, _UP).normalize();
     _up.crossVectors(_right, _dir).normalize();
-    const px = this.par.x + this.pulse.x, py = this.par.y + this.pulse.y;
+    const px = this.reduce ? 0 : this.par.x + this.pulse.x;
+    const py = this.reduce ? 0 : this.par.y + this.pulse.y;
     cam.position.addScaledVector(_right, px * 0.6).addScaledVector(_up, -py * 0.6);
     // keep the scene clear of the left-hand step panel: gently pan the framing right
     // (move camera + target left along screen-right) during the steps, desktop only
