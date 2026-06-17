@@ -19,6 +19,7 @@ import {
 import {
   buildMergePath, buildHexMarker, buildStrands, buildHeadGlow, buildPulseRing, GLOW_BLUE, GLOW_GREEN,
 } from './trail.js';
+import { REVEAL, applyReveal } from './reveal.js';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -39,6 +40,7 @@ const _dir = new THREE.Vector3();
 const _right = new THREE.Vector3();
 const _up = new THREE.Vector3();
 const _tmpTgt = new THREE.Vector3();
+const _v = new THREE.Vector3();
 const smoothstep = (a, b, x) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
   return t * t * (3 - 2 * t);
@@ -76,6 +78,7 @@ export class App {
     this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.isMobile ? 1.3 : 1.75));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+    REVEAL.uRes.value.set(this.renderer.domElement.width, this.renderer.domElement.height);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.NoToneMapping;
     this.renderer.shadowMap.enabled = true;
@@ -101,12 +104,22 @@ export class App {
 
     const ground = new THREE.Mesh(
       new THREE.PlaneGeometry(900, 500),
-      new THREE.MeshStandardMaterial({ color: PALETTE.ground, roughness: 1 })
+      applyReveal(new THREE.MeshStandardMaterial({ color: PALETTE.ground, roughness: 1 }), 0x6f9b54, 0.85)
     );
     ground.rotation.x = -Math.PI / 2;
     ground.position.set(60, 0, 0);
     ground.receiveShadow = true;
     this.scene.add(ground);
+
+    // sky dome — reveals a realistic blue near the cursor / line
+    const skyMat = applyReveal(new THREE.MeshBasicMaterial({ color: PALETTE.bg }), 0x86b3e0, 0.9);
+    skyMat.side = THREE.BackSide;
+    skyMat.fog = false;
+    skyMat.depthWrite = false;
+    const sky = new THREE.Mesh(new THREE.SphereGeometry(320, 24, 16), skyMat);
+    sky.position.set(70, 0, 0);
+    sky.renderOrder = -1;
+    this.scene.add(sky);
   }
 
   collect(obj) {
@@ -389,10 +402,12 @@ export class App {
       this.camera.updateProjectionMatrix();
       this.renderer.setSize(w, h);
       this.composer.setSize(w, h);
+      REVEAL.uRes.value.set(this.renderer.domElement.width, this.renderer.domElement.height);
     });
     window.addEventListener('pointermove', (e) => {
       this.mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
       this.mouse.y = (e.clientY / window.innerHeight) * 2 - 1;
+      this._revealOn = true;
     });
   }
 
@@ -511,6 +526,11 @@ export class App {
     this.par.y += (this.mouse.y - this.par.y) * u;
     this.pulse.x *= 0.9;
     this.pulse.y *= 0.9;
+
+    // cursor colour-reveal: follow the pointer, fade in once it has moved (desktop)
+    if (!this.isMobile) REVEAL.uMouse.value.set(0.5 + 0.5 * this.mouse.x, 0.5 - 0.5 * this.mouse.y);
+    const revTarget = !this.isMobile && this._revealOn ? 1 : 0;
+    REVEAL.uMouseAct.value += (revTarget - REVEAL.uMouseAct.value) * Math.min(1, dt * 4);
     const cam = this.camera;
     // narrow/portrait screens dolly the camera back so nothing gets cropped
     const zoom = cam.aspect < 1.25 ? 1 + (1.25 - cam.aspect) * 0.95 : 1;
@@ -560,6 +580,7 @@ export class App {
 
     // culture head glow sprite rides the merged line tip
     const pd = this.path?.userData;
+    let lineOn = 0;
     if (pd) {
       pd.time.value = t;
       const h = pd.head.value;
@@ -569,8 +590,13 @@ export class App {
         this.headGlow.position.set(x, 0.24, z);
         this.headGlow.scale.setScalar(1.0 * (1 + Math.sin(t * 5) * 0.1));
         this.headGlow.material.opacity = 0.3 * pd.fade.value;
+        // the line lights up the area it passes through during scroll
+        _v.copy(this.headGlow.position).project(this.camera);
+        REVEAL.uLine.value.set(_v.x * 0.5 + 0.5, _v.y * 0.5 + 0.5);
+        lineOn = _v.z < 1 ? 1 : 0;
       } else this.headGlow.material.opacity = 0;
     }
+    REVEAL.uLineAct.value += (lineOn - REVEAL.uLineAct.value) * Math.min(1, dt * 4);
     for (const m of this.strands?.userData.mats || []) m.uniforms.uTime.value = t;
     for (const f of this.feeders || []) for (const m of f.userData.mats) m.uniforms.uTime.value = t;
 

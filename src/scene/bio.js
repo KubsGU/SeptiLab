@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { PALETTE, whiteMat } from './builders.js';
+import { PALETTE, whiteMat, leafMat, soilMat } from './builders.js';
 import { makeGlowTexture } from './trail.js';
+import { applyReveal } from './reveal.js';
 
 /* ----------------------------------------------------------- materials */
 export const steelMat = new THREE.MeshStandardMaterial({
@@ -9,6 +10,8 @@ export const steelMat = new THREE.MeshStandardMaterial({
   roughness: 0.5,
   metalness: 0.12,
 });
+// equipment reveals realistic stainless near the cursor
+applyReveal(steelMat, 0x8a98ad, 0.55);
 export const accentMat = new THREE.MeshStandardMaterial({
   color: 0x44588c,
   roughness: 0.6,
@@ -143,14 +146,14 @@ export function buildTree(seed = 1) {
   const g = new THREE.Group();
   const rand = rng(seed);
   const h = 1.6 + rand() * 1.2;
-  const trunk = cyl(0.08, 0.13, h, 7);
+  const trunk = cyl(0.08, 0.13, h, 7, soilMat);
   trunk.position.y = h / 2;
   g.add(trunk);
   const foliage = new THREE.Group();
   const tiers = 2 + Math.floor(rand() * 2);
   for (let i = 0; i < tiers; i++) {
     const r = (0.8 - i * 0.18) * (0.9 + rand() * 0.2);
-    const cone = new THREE.Mesh(new THREE.ConeGeometry(r, 0.95, 9), whiteMat);
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(r, 0.95, 9), leafMat);
     cone.position.y = h + 0.1 + i * 0.55;
     cone.castShadow = true;
     foliage.add(cone);
@@ -167,7 +170,7 @@ export function buildBush(seed = 2) {
   const n = 3 + Math.floor(rand() * 3);
   for (let i = 0; i < n; i++) {
     const r = 0.3 + rand() * 0.35;
-    const blob = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 0), whiteMat);
+    const blob = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 0), leafMat);
     blob.position.set((rand() - 0.5) * 0.8, r * 0.7, (rand() - 0.5) * 0.8);
     blob.castShadow = true;
     g.add(blob);
@@ -181,7 +184,7 @@ export function buildSoilMound(radius = 1.6) {
   const g = new THREE.Group();
   const mound = new THREE.Mesh(
     new THREE.SphereGeometry(radius, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2),
-    whiteMat
+    soilMat
   );
   mound.scale.y = 0.42;
   mound.castShadow = true;
@@ -203,7 +206,7 @@ export function buildCompost() {
   const g = new THREE.Group();
   // open wooden-bin compost as a low rounded heap inside a frame
   g.add(box(2.0, 0.9, 1.6, 0, 0.45, 0, steelMat, 0.06));
-  const heap = new THREE.Mesh(new THREE.IcosahedronGeometry(0.95, 1), whiteMat);
+  const heap = new THREE.Mesh(new THREE.IcosahedronGeometry(0.95, 1), soilMat);
   heap.scale.set(1, 0.55, 0.8);
   heap.position.y = 0.95;
   heap.castShadow = true;
@@ -881,6 +884,9 @@ export function buildMixingVat(scale = 1) {
 const roofMat = new THREE.MeshStandardMaterial({ color: 0x3c4d7a, roughness: 0.7 });
 const woodMat = new THREE.MeshStandardMaterial({ color: 0xdfe6ee, roughness: 0.9 });
 const gravelMat = new THREE.MeshStandardMaterial({ color: 0xcdd7e1, roughness: 1 });
+applyReveal(roofMat, 0x7a4a39, 0.62);   // terracotta roof
+applyReveal(woodMat, 0x9c7448, 0.85);   // wood
+applyReveal(gravelMat, 0xb6a888, 0.7);  // gravel / path
 
 export function buildHouse() {
   const g = new THREE.Group();
@@ -1220,6 +1226,7 @@ export function buildSepticCutaway() {
 /* ============================================================ extra props (densify every zone) */
 const stoneMat = new THREE.MeshStandardMaterial({ color: 0xbcc7d3, roughness: 1 });
 const darkGlass = new THREE.MeshStandardMaterial({ color: 0x2b3a63, roughness: 0.3, metalness: 0.2 });
+applyReveal(stoneMat, 0x9b9387, 0.55);  // stone / rock
 
 export function buildRock(seed = 1) {
   const g = new THREE.Group();
@@ -1242,7 +1249,7 @@ export function buildGrassTuft(seed = 1) {
   const rand = rng(seed * 7 + 3);
   const n = 4 + Math.floor(rand() * 5);
   for (let i = 0; i < n; i++) {
-    const blade = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.32 + rand() * 0.32, 4), whiteMat);
+    const blade = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.32 + rand() * 0.32, 4), leafMat);
     blade.position.set((rand() - 0.5) * 0.45, 0.18, (rand() - 0.5) * 0.45);
     blade.rotation.z = (rand() - 0.5) * 0.5;
     g.add(blade);
@@ -1254,7 +1261,7 @@ export function buildGrassTuft(seed = 1) {
 
 export function buildLog() {
   const g = new THREE.Group();
-  const log = cyl(0.18, 0.2, 1.5, 10, woodMat);
+  const log = cyl(0.18, 0.2, 1.5, 10, soilMat);
   log.rotation.z = Math.PI / 2;
   log.position.y = 0.2;
   log.castShadow = true;

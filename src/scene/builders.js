@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { applyReveal } from './reveal.js';
 
 /* Shared palette + generic primitives reused across the bio scene. */
 export const PALETTE = {
@@ -15,6 +16,14 @@ export const whiteMat = new THREE.MeshStandardMaterial({
   roughness: 0.94,
   metalness: 0,
 });
+// generic white surfaces reveal a realistic warm concrete tone
+applyReveal(whiteMat, 0xd2cdbf, 0.5);
+
+// white base materials that reveal vivid nature colours near the cursor
+export const leafMat = applyReveal(
+  new THREE.MeshStandardMaterial({ color: PALETTE.white, roughness: 0.92, metalness: 0 }), 0x55a85f, 1.0);
+export const soilMat = applyReveal(
+  new THREE.MeshStandardMaterial({ color: PALETTE.white, roughness: 0.95, metalness: 0 }), 0x9c7a52, 0.92);
 
 /* ---- people (scale/scene dressing) ---- */
 export function buildFigure() {
